@@ -4,7 +4,7 @@ go 1.22.0
 
 toolchain go1.22.4
 
-replace github.com/slackhq/nebula v1.9.3 => github.com/spiralp/nebula v1.9.3-custom4
+replace github.com/slackhq/nebula v1.9.3 => github.com/spiralp/nebula v1.9.3-custom6
 
 require (
 	github.com/DefinedNet/dnapi v0.0.0-20240619143857-b7534ee1675d
@@ -38,7 +38,7 @@ require (
 	golang.org/x/mod v0.20.0 // indirect
 	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.23.0 // indirect
+	golang.org/x/sys v0.24.0 // indirect
 	golang.org/x/term v0.23.0 // indirect
 	golang.org/x/tools v0.24.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
