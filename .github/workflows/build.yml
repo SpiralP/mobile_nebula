@@ -1,5 +1,13 @@
 name: Build
-on: [push]
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -37,7 +45,7 @@ jobs:
           # source.properties to determine the version
 
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install the google play key material
         env:
@@ -69,8 +77,31 @@ jobs:
           flutter build apk
 
       - name: Collect Android artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: MobileNebula.apk
+          name: MobileNebula
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 5
+
+  release:
+    needs: [build]
+
+    permissions:
+      contents: write
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: MobileNebula
+          path: MobileNebula
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEXT_TAG="v$(gh release view --json tagName --jq '.tagName[1:] | tonumber + 1')"
+          gh release create --latest "$NEXT_TAG" MobileNebula/app-release.apk
