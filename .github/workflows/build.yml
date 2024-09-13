@@ -26,7 +26,7 @@ jobs:
       - name: Collect Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: MobileNebula.apk
+          name: MobileNebula
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 5
 
@@ -43,11 +43,12 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: MobileNebula.apk
-          path: artifacts
+          name: MobileNebula
+          path: MobileNebula
 
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          find artifacts
+          NEXT_TAG="v$(gh release view --json tagName --jq '.tagName[1:] | tonumber + 1')"
+          gh release create --latest "$NEXT_TAG" MobileNebula/app-release.apk
