@@ -1,5 +1,13 @@
 name: Build
-on: [push]
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -69,8 +77,33 @@ jobs:
           flutter build apk
 
       - name: Collect Android artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: MobileNebula.apk
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 5
+
+  release:
+    needs: [build]
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+
+    permissions:
+      contents: write
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd artifacts
+          gh release create \
+            --verify-tag \
+            --title "Release ${{ github.ref_name }}" \
+            "${{ github.ref_name }}" \
+            MobileNebula.apk
