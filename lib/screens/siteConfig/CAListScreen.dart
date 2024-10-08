@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_barcode_scanner/flutter_barcode_scanner.dart';
+import 'package:flutter_platform_widgets/flutter_platform_widgets.dart';
 import 'package:mobile_nebula/components/FormPage.dart';
 import 'package:mobile_nebula/components/config/ConfigButtonItem.dart';
 import 'package:mobile_nebula/components/config/ConfigPageItem.dart';
@@ -10,6 +10,7 @@ import 'package:mobile_nebula/components/config/ConfigSection.dart';
 import 'package:mobile_nebula/components/config/ConfigTextItem.dart';
 import 'package:mobile_nebula/models/Certificate.dart';
 import 'package:mobile_nebula/screens/siteConfig/CertificateDetailsScreen.dart';
+import 'package:mobile_nebula/screens/siteConfig/ScanQRScreen.dart';
 import 'package:mobile_nebula/services/utils.dart';
 
 //TODO: wire up the focus nodes, add a done/next/prev to the keyboard
@@ -64,18 +65,18 @@ class _CAListScreenState extends State<CAListScreen> {
     }
 
     return FormPage(
-          title: 'Certificate Authorities',
-          changed: changed,
-          onSave: () {
-            if (widget.onSave != null) {
-              Navigator.pop(context);
-              widget.onSave!(cas.values.map((ca) {
-                return ca;
-              }).toList());
-            }
-          },
-          child: Column(children: items));
-    }
+        title: 'Certificate Authorities',
+        changed: changed,
+        onSave: () {
+          if (widget.onSave != null) {
+            Navigator.pop(context);
+            widget.onSave!(cas.values.map((ca) {
+              return ca;
+            }).toList());
+          }
+        },
+        child: Column(children: items));
+  }
 
   List<Widget> _buildCAs() {
     List<Widget> items = [];
@@ -85,14 +86,16 @@ class _CAListScreenState extends State<CAListScreen> {
         onPressed: () {
           Utils.openPage(context, (context) {
             return CertificateDetailsScreen(
-                certInfo: ca,
-                onDelete: widget.onSave == null ? null : () {
-                  setState(() {
-                    changed = true;
-                    cas.remove(key);
-                  });
-                },
-                supportsQRScanning: widget.supportsQRScanning,
+              certInfo: ca,
+              onDelete: widget.onSave == null
+                  ? null
+                  : () {
+                      setState(() {
+                        changed = true;
+                        cas.remove(key);
+                      });
+                    },
+              supportsQRScanning: widget.supportsQRScanning,
             );
           });
         },
@@ -231,23 +234,26 @@ class _CAListScreenState extends State<CAListScreen> {
       ConfigSection(
         children: [
           ConfigButtonItem(
-              content: Text('Scan a QR code'),
-              onPressed: () async {
-                try {
-                  var result = await FlutterBarcodeScanner.scanBarcode('#ff6666', 'Cancel', true, ScanMode.QR);
-                  if (result != "") {
-                    _addCAEntry(result, (err) {
-                      if (err != null) {
-                        Utils.popError(context, 'Error loading CA content', err);
-                      } else {
-                        setState(() {});
-                      }
-                    });
+            content: Text('Scan a QR code'),
+            onPressed: () async {
+              var result = await Navigator.push(
+                context,
+                platformPageRoute(
+                  context: context,
+                  builder: (context) => new ScanQRScreen(),
+                ),
+              );
+              if (result != null) {
+                _addCAEntry(result, (err) {
+                  if (err != null) {
+                    Utils.popError(context, 'Error loading CA content', err);
+                  } else {
+                    setState(() {});
                   }
-                } catch (err) {
-                  return Utils.popError(context, 'Error scanning QR code', err.toString());
-                }
-              })
+                });
+              }
+            },
+          )
         ],
       )
     ];

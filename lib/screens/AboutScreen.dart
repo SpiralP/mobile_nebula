@@ -6,7 +6,7 @@ import 'package:mobile_nebula/components/config/ConfigPageItem.dart';
 import 'package:mobile_nebula/components/config/ConfigSection.dart';
 import 'package:mobile_nebula/gen.versions.dart';
 import 'package:mobile_nebula/services/utils.dart';
-import 'package:package_info/package_info.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class AboutScreen extends StatefulWidget {
   const AboutScreen({Key? key}) : super(key: key);
@@ -73,7 +73,7 @@ class _AboutScreenState extends State<AboutScreen> {
         Padding(
             padding: EdgeInsets.only(top: 20),
             child: Text(
-              'Copyright © 2022 Defined Networking, Inc',
+              'Copyright © 2024 Defined Networking, Inc',
               textAlign: TextAlign.center,
             )),
       ]),

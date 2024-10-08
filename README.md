@@ -8,7 +8,7 @@ Install all of the following things:
 
 - [`xcode`](https://apps.apple.com/us/app/xcode/)
 - [`android-studio`](https://developer.android.com/studio)
-- [`flutter` 3.3.5](https://docs.flutter.dev/get-started/install)
+- [`flutter` 3.24.1](https://docs.flutter.dev/get-started/install)
 - [`gomobile`](https://pkg.go.dev/golang.org/x/mobile/cmd/gomobile)
 - [Flutter Android Studio Extension](https://docs.flutter.dev/get-started/editor?tab=androidstudio)
 
@@ -22,7 +22,7 @@ Run `flutter doctor` and fix everything it complains before proceeding
 
 - Copy `env.sh.example` and set it up for your machine
 - Ensure you have run `gomobile init`
-- In Android Studio, make sure you have the current ndk installed by going to Tools -> SDK Manager, go to the SDK Tools tab, check the `Show package details` box, expand the NDK section and select `21.1.6352462` version.
+- In Android Studio, make sure you have the current ndk installed by going to Tools -> SDK Manager, go to the SDK Tools tab, check the `Show package details` box, expand the NDK section and select `26.1.10909125` version.
 - Ensure you have downloaded an ndk via android studio, this is likely not the default one and you need to check the
   `Show package details` box to select the correct version. The correct version comes from the error when you try and compile
 - Make sure you have `gem` installed with `sudo gem install`
@@ -32,12 +32,15 @@ If you are having issues with iOS pods, try blowing it all away! `cd ios && rm -
 
 # Formatting
 
-`flutter format` can be used to format the code in `lib` and `test` but it's default is 80 char line limit, it's 2020
+`dart format` can be used to format the code in `lib` and `test`.  We use a line-length of 120 characters.
 
 Use:
 ```sh
-flutter format lib/ test/ -l 120
+dart format lib/ test/ -l 120
 ```
+
+In Android Studio, set the line length using Preferences -> Editor -> Code Style -> Dart -> Line length, set it to 120.  Enable auto-format with Preferences -> Languages & Frameworks -> Flutter -> Format code on save.
+
 
 # Release
 
