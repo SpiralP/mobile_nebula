@@ -7,7 +7,7 @@ toolchain go1.22.4
 replace github.com/slackhq/nebula v1.9.4 => github.com/spiralp/nebula v1.9.4-custom3
 
 require (
-	github.com/DefinedNet/dnapi v0.0.0-20240611201323-4589547bd270
+	github.com/DefinedNet/dnapi v0.0.0-20240619143857-b7534ee1675d
 	github.com/sirupsen/logrus v1.9.3
 	github.com/slackhq/nebula v1.9.4
 	golang.org/x/crypto v0.28.0
@@ -28,18 +28,19 @@ require (
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/miekg/dns v1.1.62 // indirect
+	github.com/miekg/pkcs11 v1.1.2-0.20231115102856-9078ad6b9d4b // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nbrownus/go-metrics-prometheus v0.0.0-20210712211119-974a6260965f // indirect
 	github.com/prometheus/client_golang v1.20.5 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
-	github.com/prometheus/common v0.60.0 // indirect
+	github.com/prometheus/common v0.60.1 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 // indirect
+	github.com/stefanberger/go-pkcs11uri v0.0.0-20230803200340-78284954bff6 // indirect
 	github.com/vishvananda/netlink v1.3.0 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
 	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c // indirect
-	golang.org/x/mobile v0.0.0-20241016134751-7ff83004ec2c // indirect
 	golang.org/x/mod v0.21.0 // indirect
 	golang.org/x/net v0.30.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
