@@ -82,12 +82,6 @@ func newConfig() *config {
 					Proto: "any",
 					Host:  "any",
 				},
-				// kdeconnect
-				{
-					Port:  "1716",
-					Proto: "any",
-					Host:  "any",
-				},
 			},
 		},
 	}
