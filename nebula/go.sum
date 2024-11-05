@@ -135,8 +135,8 @@ github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ
 github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 h1:TG/diQgUe0pntT/2D9tmUCz4VNwm9MfrtPr0SU2qSX8=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8/go.mod h1:P5HUIBuIWKbyjl083/loAegFkfbFNx5i2qEP4CNbm7E=
-github.com/spiralp/nebula v1.9.4-custom3 h1:6B5Op1GFQt7y3oU7nehW+qcN6a1zQlVQgQv2A9xCJ2o=
-github.com/spiralp/nebula v1.9.4-custom3/go.mod h1:h1nMIB0BOjzsRoPsQJL5qHVFVn/Q0CrdJ7xTB0+rrQ0=
+github.com/spiralp/nebula v1.9.4-custom3-1 h1:wlVIsO1Bmrcr7qX2+7NEjf5GPW/QoH5NMIMfJpG0uC4=
+github.com/spiralp/nebula v1.9.4-custom3-1/go.mod h1:h1nMIB0BOjzsRoPsQJL5qHVFVn/Q0CrdJ7xTB0+rrQ0=
 github.com/stefanberger/go-pkcs11uri v0.0.0-20230803200340-78284954bff6 h1:pnnLyeX7o/5aX8qUQ69P/mLojDqwda8hFOCBTmP/6hw=
 github.com/stefanberger/go-pkcs11uri v0.0.0-20230803200340-78284954bff6/go.mod h1:39R/xuhNgVhi+K0/zst4TLrJrVmbm6LVgl4A0+ZFS5M=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
