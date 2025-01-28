@@ -54,3 +54,5 @@ lib/generated_plugin_registrant.dart
 /*.secrets
 /*.jks
 /*.apk
+/*.idsig
+/result
