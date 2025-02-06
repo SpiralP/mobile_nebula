@@ -72,6 +72,18 @@
 
           gomobile = (pkgs.gomobile.override {
             androidPkgs = androidComposition;
+            buildGoModule = pkgs.buildGoModule.override {
+              # fix starting vpn sometimes failing
+              # "bulkBarrierPreWrite: unaligned arguments"
+              go = pkgs.go.overrideAttrs (old: {
+                patches = old.patches ++ [
+                  (pkgs.fetchpatch2 {
+                    url = "https://github.com/golang/go/pull/53064.patch";
+                    hash = "sha256-MB/8sSssGNJALHk7Xp+5IfQdsjqB3gz/Crj+MxbzVz0=";
+                  })
+                ];
+              });
+            };
           }).overrideAttrs (prev: {
             src = (pkgs.applyPatches {
               src = pkgs.fetchFromGitHub {
