@@ -126,7 +126,7 @@
                   cat $out
                 ''
             );
-            hash = "sha256-+6hGRGWDXnT3Jwu/Q9bYqNdwmrCkPOGqMyP3PpqgxhI=";
+            hash = "sha256-5XH53Cyv6rr2MZdWg4BCuyfDwarTB9QcFADLEt7HueA=";
           };
 
           setup = ''
