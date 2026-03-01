@@ -1,4 +1,11 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>SpiralP/github-reusable-workflows//.github/renovate.json"]
+  "extends": ["github>SpiralP/github-reusable-workflows//.github/renovate.json"],
+  "packageRules": [
+    {
+      "matchPackageNames": ["com.google.guava:guava"],
+      "allowedVersions": "/-android$/",
+      "description": "Pin guava to use android variant, not jre"
+    }
+  ]
 }
