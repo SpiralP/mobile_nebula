@@ -66,7 +66,7 @@ dependencies {
     implementation("androidx.security:security-crypto:1.1.0")
     implementation("androidx.work:work-runtime-ktx:$workVersion")
     implementation("com.google.code.gson:gson:2.13.2")
-    implementation("com.google.guava:guava:33.5.0-android")
+    implementation("com.google.guava:guava:33.5.0-jre")
     implementation(project(":mobileNebula"))
 
 }
