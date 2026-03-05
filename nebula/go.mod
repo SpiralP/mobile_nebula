@@ -11,6 +11,7 @@ require (
 	golang.org/x/crypto v0.48.0
 	golang.org/x/mobile v0.0.0-20260204172633-1dceadbbeea3
 	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
