@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/DefinedNet/dnapi/keys"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Site represents an IncomingSite in Kotlin/Swift.
