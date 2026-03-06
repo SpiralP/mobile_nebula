@@ -10,7 +10,7 @@ require (
 	github.com/slackhq/nebula v1.10.3
 	golang.org/x/crypto v0.48.0
 	golang.org/x/mobile v0.0.0-20260204172633-1dceadbbeea3
-	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -49,4 +49,5 @@ require (
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

@@ -188,7 +188,7 @@
 
             src = ./nebula;
 
-            vendorHash = "sha256-LBQ72b1df1I9FgZYJwuutQ4GpGZZ8jT/tJYvuRWrxs4=";
+            vendorHash = "sha256-RN2KXeYneO11+dXvLayKJMQ9jzoUqxsu7niXjCmHOTo=";
 
             proxyVendor = true;
             overrideModAttrs = (final: prev: {

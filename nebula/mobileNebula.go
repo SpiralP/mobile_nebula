@@ -20,7 +20,7 @@ import (
 	nc "github.com/slackhq/nebula/config"
 	"github.com/slackhq/nebula/util"
 	"golang.org/x/crypto/curve25519"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 type m map[string]any
