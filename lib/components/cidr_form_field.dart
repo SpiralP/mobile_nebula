@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:mobile_nebula/components/cidr_field.dart';
 import 'package:mobile_nebula/models/cidr.dart';
 import 'package:mobile_nebula/validators/ip_validator.dart';
@@ -18,10 +18,16 @@ class CIDRFormField extends FormField<CIDR> {
     super.initialValue,
     this.ipController,
     this.bitsController,
+    bool required = true,
+    bool enabled = true,
   }) : super(
          validator: (cidr) {
            if (cidr == null) {
-             return "Please fill out this field";
+             return required ? "Please fill out this field" : null;
+           }
+
+           if (!required && cidr.ip.isEmpty && cidr.bits == 0) {
+             return null;
            }
 
            var (valid, type) = ipValidator(cidr.ip);
@@ -60,11 +66,12 @@ class CIDRFormField extends FormField<CIDR> {
                  textInputAction: textInputAction,
                  ipController: state._effectiveIPController,
                  bitsController: state._effectiveBitsController,
+                 enabled: enabled,
                ),
                field.hasError
                    ? Text(
                        field.errorText ?? "Unknown error",
-                       style: TextStyle(color: CupertinoColors.systemRed.resolveFrom(field.context), fontSize: 13),
+                       style: TextStyle(color: Theme.of(field.context).colorScheme.error, fontSize: 13),
                        textAlign: TextAlign.end,
                      )
                    : Container(height: 0),

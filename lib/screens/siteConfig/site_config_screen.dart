@@ -1,21 +1,21 @@
 import 'dart:convert';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_platform_widgets/flutter_platform_widgets.dart' as fpw;
 import 'package:intl/intl.dart';
 import 'package:mobile_nebula/components/config/config_item.dart';
 import 'package:mobile_nebula/components/config/config_page_item.dart';
 import 'package:mobile_nebula/components/config/config_section.dart';
 import 'package:mobile_nebula/components/form_page.dart';
-import 'package:mobile_nebula/components/platform_text_form_field.dart';
+import 'package:mobile_nebula/components/app_text_form_field.dart';
+import 'package:mobile_nebula/models/firewall_rule.dart';
 import 'package:mobile_nebula/models/site.dart';
 import 'package:mobile_nebula/screens/siteConfig/add_certificate_screen.dart';
 import 'package:mobile_nebula/screens/siteConfig/advanced_screen.dart';
 import 'package:mobile_nebula/screens/siteConfig/ca_list_screen.dart';
 import 'package:mobile_nebula/screens/siteConfig/certificate_details_screen.dart';
+import 'package:mobile_nebula/screens/siteConfig/firewall_rules_screen.dart';
 import 'package:mobile_nebula/screens/siteConfig/static_hosts_screen.dart';
 import 'package:mobile_nebula/services/utils.dart';
 
@@ -59,6 +59,10 @@ class SiteConfigScreenState extends State<SiteConfigScreen> {
     if (widget.site == null) {
       newSite = true;
       site = Site();
+      // Seed default outbound rule: allow all traffic
+      site.outboundFirewallRules = [
+        FirewallRule(port: 'any', proto: 'any', host: 'any', description: 'Allow all outbound'),
+      ];
     } else {
       site = widget.site!;
       nameController.text = site.name;
@@ -74,13 +78,7 @@ class SiteConfigScreenState extends State<SiteConfigScreen> {
   @override
   Widget build(BuildContext context) {
     if (pubKey == null || privKey == null) {
-      return Center(
-        child: fpw.PlatformCircularProgressIndicator(
-          cupertino: (_, _) {
-            return fpw.CupertinoProgressIndicatorData(radius: 50);
-          },
-        ),
-      );
+      return Center(child: CircularProgressIndicator.adaptive());
     }
 
     return FormPage(
@@ -105,6 +103,7 @@ class SiteConfigScreenState extends State<SiteConfigScreen> {
           _main(),
           _keys(),
           _hosts(),
+          _firewall(),
           _advanced(),
           _managed(),
           kDebugMode ? _debugConfig() : Container(height: 0),
@@ -145,8 +144,8 @@ class SiteConfigScreenState extends State<SiteConfigScreen> {
 
     return ConfigSection(
       label: 'ERRORS',
-      borderColor: CupertinoColors.systemRed.resolveFrom(context),
-      labelColor: CupertinoColors.systemRed.resolveFrom(context),
+      borderColor: Theme.of(context).colorScheme.error,
+      labelColor: Theme.of(context).colorScheme.error,
       children: items,
     );
   }
@@ -156,7 +155,7 @@ class SiteConfigScreenState extends State<SiteConfigScreen> {
       children: <Widget>[
         ConfigItem(
           label: Text("Name"),
-          content: PlatformTextFormField(
+          content: AppTextFormField(
             placeholder: 'Required',
             controller: nameController,
             validator: (name) {
@@ -221,7 +220,7 @@ class SiteConfigScreenState extends State<SiteConfigScreen> {
               certError
                   ? Padding(
                       padding: EdgeInsets.only(right: 5),
-                      child: Icon(Icons.error, color: CupertinoColors.systemRed.resolveFrom(context), size: 20),
+                      child: Icon(Icons.error, color: Theme.of(context).colorScheme.error, size: 20),
                     )
                   : Container(),
               certError ? Text('Needs attention') : Text(site.certInfo?.cert.name ?? 'Unknown certificate'),
@@ -239,8 +238,7 @@ class SiteConfigScreenState extends State<SiteConfigScreen> {
                       : (result) {
                           setState(() {
                             changed = true;
-                            site.certInfo = result.certInfo;
-                            site.key = result.key;
+                            site.setCertificate(result.certInfo, result.key);
                           });
                         },
                   supportsQRScanning: widget.supportsQRScanning,
@@ -253,8 +251,7 @@ class SiteConfigScreenState extends State<SiteConfigScreen> {
                 onSave: (result) {
                   setState(() {
                     changed = true;
-                    site.certInfo = result.certInfo;
-                    site.key = result.key;
+                    site.setCertificate(result.certInfo, result.key);
                   });
                 },
                 supportsQRScanning: widget.supportsQRScanning,
@@ -271,7 +268,7 @@ class SiteConfigScreenState extends State<SiteConfigScreen> {
               caError
                   ? Padding(
                       padding: EdgeInsets.only(right: 5),
-                      child: Icon(Icons.error, color: CupertinoColors.systemRed.resolveFrom(context), size: 20),
+                      child: Icon(Icons.error, color: Theme.of(context).colorScheme.error, size: 20),
                     )
                   : Container(),
               caError ? Text('Needs attention') : Text(Utils.itemCountFormat(site.ca.length)),
@@ -286,7 +283,7 @@ class SiteConfigScreenState extends State<SiteConfigScreen> {
                     : (ca) {
                         setState(() {
                           changed = true;
-                          site.ca = ca;
+                          site.setCertificateAuthorities(ca);
                         });
                       },
                 supportsQRScanning: widget.supportsQRScanning,
@@ -311,7 +308,7 @@ class SiteConfigScreenState extends State<SiteConfigScreen> {
               site.staticHostmap.isEmpty
                   ? Padding(
                       padding: EdgeInsets.only(right: 5),
-                      child: Icon(Icons.error, color: CupertinoColors.systemRed.resolveFrom(context), size: 20),
+                      child: Icon(Icons.error, color: Theme.of(context).colorScheme.error, size: 20),
                     )
                   : Container(),
               site.staticHostmap.isEmpty
@@ -329,6 +326,62 @@ class SiteConfigScreenState extends State<SiteConfigScreen> {
                         setState(() {
                           changed = true;
                           site.staticHostmap = map;
+                        });
+                      },
+              );
+            });
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _firewall() {
+    return ConfigSection(
+      label: "FIREWALL",
+      children: <Widget>[
+        ConfigPageItem(
+          label: Text('Inbound'),
+          content: Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: <Widget>[Text(Utils.itemCountFormat(site.inboundFirewallRules.length))],
+          ),
+          onPressed: () {
+            Utils.openPage(context, (context) {
+              return FirewallRulesScreen(
+                title: 'Inbound Rules',
+                rules: site.inboundFirewallRules,
+                onSave: site.managed
+                    ? null
+                    : (rules) {
+                        setState(() {
+                          changed = true;
+                          site.inboundFirewallRules = rules;
+                        });
+                      },
+              );
+            });
+          },
+        ),
+        ConfigPageItem(
+          label: Text('Outbound'),
+          content: Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: <Widget>[Text(Utils.itemCountFormat(site.outboundFirewallRules.length))],
+          ),
+          onPressed: () {
+            Utils.openPage(context, (context) {
+              return FirewallRulesScreen(
+                title: 'Outbound Rules',
+                rules: site.outboundFirewallRules,
+                onSave: site.managed
+                    ? null
+                    : (rules) {
+                        setState(() {
+                          changed = true;
+                          site.outboundFirewallRules = rules;
                         });
                       },
               );
@@ -358,7 +411,10 @@ class SiteConfigScreenState extends State<SiteConfigScreen> {
                     site.logVerbosity = settings.verbosity;
                     site.unsafeRoutes = settings.unsafeRoutes;
                     site.dnsResolvers = settings.dnsResolvers;
+                    site.matchDomains = settings.matchDomains;
                     site.mtu = settings.mtu;
+                    site.excludedApps = settings.excludedApps;
+                    site.staticMapNetwork = settings.staticMapNetwork;
                   });
                 },
               );

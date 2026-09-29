@@ -3,23 +3,20 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
-import 'package:mobile_nebula/errors/parse_error.dart';
 import 'package:mobile_nebula/models/hostinfo.dart';
-import 'package:mobile_nebula/models/ip_and_port.dart';
+import 'package:mobile_nebula/models/firewall_rule.dart';
 import 'package:mobile_nebula/models/unsafe_route.dart';
-import 'package:mobile_nebula/services/utils.dart';
-import 'package:mobile_nebula/validators/ip_validator.dart';
 import 'package:uuid/uuid.dart';
 import 'package:yaml/yaml.dart';
 
 import 'certificate.dart';
 import 'static_hosts.dart';
 
+// Re-export HostInfo for use by callers that used to import it transitively
+export 'package:mobile_nebula/models/hostinfo.dart';
+
 var uuid = Uuid();
 final _log = Logger('site');
-
-final _validLogLevels = ['panic', 'fatal', 'error', 'warning', 'info', 'debug'];
-final _validCiphers = ['aes', 'chachapoly'];
 
 class Site {
   static const platform = MethodChannel('net.defined.mobileNebula/NebulaVpnService');
@@ -32,35 +29,34 @@ class Site {
   // Identifiers
   late String name;
   late String id;
-
-  // static_host_map
-  late Map<String, StaticHost> staticHostmap;
-  late List<UnsafeRoute> unsafeRoutes;
-
-  // pki fields
-  late List<CertificateInfo> ca;
-  String? key;
-  late CertificateInfo? certInfo;
-
-  // lighthouse options
-  late int lhDuration; // in seconds
-
-  // listen settings
-  late int port;
-  late int mtu;
-
-  late String cipher;
   late int sortKey;
+  late int configVersion;
+
+  // Nebula config as parsed JSON map (no private key)
+  late Map<String, dynamic> rawConfig;
+
+  // Private key — transient, only for save
+  String? key;
+
+  // Display-only (populated by native on load)
+  late List<CertificateInfo> ca;
+  late CertificateInfo? certInfo;
   late bool connected;
   late String status;
   late String logFile;
-  late String logVerbosity;
   late bool alwaysOn;
-  late List<String> dnsResolvers;
+  late List<String> excludedApps;
 
+  // Device-local DNS override (client-only field, preserved across managed config updates)
+  Map<String, dynamic>? dnsOverride;
+
+  // Effective DNS as resolved by the platform (dnsOverride when enabled, else
+  // managed definednet.dns). Display-only; edits go through the dnsOverride setters.
+  late List<String> effectiveDnsResolvers;
+  late List<String> effectiveMatchDomains;
+
+  // DN management
   late bool managed;
-  // The following fields are present when managed = true
-  late String? rawConfig;
   late DateTime? lastManagedUpdate;
 
   // A list of errors encountered while loading the site
@@ -69,36 +65,31 @@ class Site {
   Site({
     this.name = '',
     String? id,
-    Map<String, StaticHost>? staticHostmap,
+    Map<String, dynamic>? rawConfig,
     List<CertificateInfo>? ca,
     this.certInfo,
-    this.lhDuration = 0,
-    this.port = 0,
-    this.cipher = "aes",
     this.sortKey = 0,
-    this.mtu = 1300,
+    this.configVersion = 0,
     this.connected = false,
     this.status = '',
     this.logFile = '',
-    this.logVerbosity = 'info',
     List<String>? errors,
-    List<UnsafeRoute>? unsafeRoutes,
     this.managed = false,
-    this.rawConfig,
     this.lastManagedUpdate,
     this.alwaysOn = false,
-    List<String>? dnsResolvers,
+    List<String>? excludedApps,
+    this.dnsOverride,
+    List<String>? effectiveDnsResolvers,
+    List<String>? effectiveMatchDomains,
   }) {
     this.id = id ?? uuid.v4();
-    this.staticHostmap = staticHostmap ?? {};
+    this.rawConfig = rawConfig ?? {};
     this.ca = ca ?? [];
     this.errors = errors ?? [];
-    this.unsafeRoutes = unsafeRoutes ?? [];
-    this.dnsResolvers = dnsResolvers ?? [];
+    this.excludedApps = excludedApps ?? [];
+    this.effectiveDnsResolvers = effectiveDnsResolvers ?? [];
+    this.effectiveMatchDomains = effectiveMatchDomains ?? [];
 
-    //TODO: I think this plays well with new saved sites because we should be recreating it on the main screen
-    // However it might not work on the site details page with the logs button.
-    // Basically we might need to make this a function and have save() call it on success
     if (id != null) {
       _updates = EventChannel('net.defined.nebula/${this.id}');
       _updateSubscription = _updates.receiveBroadcastStream().listen(
@@ -107,7 +98,6 @@ class Site {
             _updateFromJson(d);
             _change.add(null);
           } catch (err, stackTrace) {
-            //TODO: handle the error
             _log.severe("Got an error on the broadcast stream", err, stackTrace);
           }
         },
@@ -120,98 +110,170 @@ class Site {
     }
   }
 
+  /// Parses site JSON without constructing a full Site (no EventChannel).
+  /// Useful for testing the parse/error logic.
+  static Map<String, dynamic> parseJson(Map<String, dynamic> json) => _fromJson(json);
+
   factory Site.fromJson(Map<String, dynamic> json) {
     var decoded = Site._fromJson(json);
     return Site(
       name: decoded["name"],
       id: decoded['id'],
-      staticHostmap: decoded['staticHostmap'],
+      rawConfig: decoded['rawConfig'],
       ca: decoded['ca'],
       certInfo: decoded['certInfo'],
-      lhDuration: decoded['lhDuration'],
-      port: decoded['port'],
-      cipher: decoded['cipher'],
       sortKey: decoded['sortKey'],
-      mtu: decoded['mtu'],
+      configVersion: decoded['configVersion'],
       connected: decoded['connected'],
       status: decoded['status'],
       logFile: decoded['logFile'],
-      logVerbosity: decoded['logVerbosity'],
       errors: decoded['errors'],
-      unsafeRoutes: decoded['unsafeRoutes'],
       managed: decoded['managed'],
-      rawConfig: decoded['rawConfig'],
       lastManagedUpdate: decoded['lastManagedUpdate'],
-      dnsResolvers: decoded['dnsResolvers'],
       alwaysOn: decoded['alwaysOn'],
+      excludedApps: decoded['excludedApps'],
+      dnsOverride: decoded['dnsOverride'],
+      effectiveDnsResolvers: decoded['effectiveDnsResolvers'],
+      effectiveMatchDomains: decoded['effectiveMatchDomains'],
     );
   }
 
   static Future<Site> fromYaml(dynamic yaml) async {
     if (yaml is! YamlMap) {
-      throw ParseError('site config was not a yaml map');
+      throw FormatException('site config was not a yaml map');
     }
 
-    final site = Site();
-    var lighthouses = _fromYamlLighthouse(site, yaml);
-    _fromYamlStaticHostmap(site, lighthouses, yaml);
-    _fromYamlUnsafeRoutes(site, yaml);
-    _fromYamlCipher(site, yaml);
-    _fromYamlTun(site, yaml);
-    _fromYamlListen(site, yaml);
-    _fromYamlLogging(site, yaml);
-    await _fromYamlPki(site, platform, yaml);
+    final rawConfig = _yamlToMap(yaml);
 
-    //TODO: dns resolvers aren't a thing in nebula config today, should we support them here?
-    //TODO: any lighthouses that weren't added to site.staticHostmap should be added now with 0 destinations
-    return site;
+    // Extract and remove pki.key from rawConfig
+    String? key;
+    if (rawConfig['pki'] is Map<String, dynamic>) {
+      final pki = rawConfig['pki'] as Map<String, dynamic>;
+      if (pki['key'] is String) {
+        key = pki['key'] as String;
+      }
+      pki.remove('key');
+    }
+
+    // Hoist legacy mobile_nebula DNS settings into dnsOverride, mirroring the
+    // configVersion 2 migration; imported YAML never passes through ConfigMigrator
+    Map<String, dynamic>? dnsOverride;
+    if (rawConfig['mobile_nebula'] is Map<String, dynamic>) {
+      final mobileNebula = rawConfig['mobile_nebula'] as Map<String, dynamic>;
+      List<String> takeStringList(String key) {
+        final values = mobileNebula.remove(key);
+        if (values is! List) return [];
+        return values.map((v) => v.toString()).where((v) => v.isNotEmpty).toList();
+      }
+
+      final resolvers = takeStringList('dns_resolvers');
+      final matchDomains = takeStringList('match_domains');
+      final searchDomains = takeStringList('search_domains');
+      if (resolvers.isNotEmpty || matchDomains.isNotEmpty || searchDomains.isNotEmpty) {
+        dnsOverride = {
+          'enabled': true,
+          'resolvers': resolvers,
+          'matchDomains': matchDomains,
+          'searchDomains': searchDomains,
+        };
+      }
+      if (mobileNebula.isEmpty) {
+        rawConfig.remove('mobile_nebula');
+      }
+    }
+
+    // Parse certs for display via native
+    List<CertificateInfo> ca = [];
+    CertificateInfo? certInfo;
+    List<String> errors = [];
+
+    if (rawConfig['pki'] is Map<String, dynamic>) {
+      final pki = rawConfig['pki'] as Map<String, dynamic>;
+
+      if (pki['ca'] is String) {
+        try {
+          var rawCaInfo = await platform.invokeMethod("nebula.parseCerts", <String, String>{
+            "certs": pki['ca'] as String,
+          });
+          List<dynamic> rawCas = jsonDecode(rawCaInfo);
+          var i = 0;
+          for (var rawCa in rawCas) {
+            i++;
+            try {
+              ca.add(CertificateInfo.fromJson(rawCa));
+            } catch (err) {
+              errors.add('skipping ca $i due to error: $err');
+            }
+          }
+        } on PlatformException catch (err) {
+          errors.add('could not parse pki.ca: ${err.message}');
+        }
+      }
+
+      if (pki['cert'] is String) {
+        try {
+          var rawCertInfo = await platform.invokeMethod("nebula.parseCerts", <String, String>{
+            "certs": pki['cert'] as String,
+          });
+          List<dynamic> rawCerts = jsonDecode(rawCertInfo);
+          for (var rawCert in rawCerts) {
+            try {
+              certInfo = CertificateInfo.fromJson(rawCert);
+            } catch (err) {
+              errors.add('skipping cert due to error: $err');
+            }
+          }
+        } on PlatformException catch (err) {
+          errors.add('could not parse pki.cert: ${err.message}');
+        }
+      }
+    }
+
+    return Site(rawConfig: rawConfig, ca: ca, certInfo: certInfo, errors: errors, dnsOverride: dnsOverride)..key = key;
   }
 
   void _updateFromJson(String json) {
     var decoded = Site._fromJson(jsonDecode(json));
     name = decoded["name"];
-    id = decoded['id']; // TODO update EventChannel
-    staticHostmap = decoded['staticHostmap'];
+    id = decoded['id'];
+    rawConfig = decoded['rawConfig'];
     ca = decoded['ca'];
     certInfo = decoded['certInfo'];
-    lhDuration = decoded['lhDuration'];
-    port = decoded['port'];
-    cipher = decoded['cipher'];
     sortKey = decoded['sortKey'];
-    mtu = decoded['mtu'];
+    configVersion = decoded['configVersion'];
     connected = decoded['connected'];
     status = decoded['status'];
     logFile = decoded['logFile'];
-    logVerbosity = decoded['logVerbosity'];
     errors = decoded['errors'];
-    unsafeRoutes = decoded['unsafeRoutes'];
     managed = decoded['managed'];
-    rawConfig = decoded['rawConfig'];
     lastManagedUpdate = decoded['lastManagedUpdate'];
-    dnsResolvers = decoded['dnsResolvers'];
     alwaysOn = decoded['alwaysOn'];
+    excludedApps = decoded['excludedApps'];
+    dnsOverride = decoded['dnsOverride'];
+    effectiveDnsResolvers = decoded['effectiveDnsResolvers'];
+    effectiveMatchDomains = decoded['effectiveMatchDomains'];
   }
 
   static Map<String, dynamic> _fromJson(Map<String, dynamic> json) {
-    Map<String, dynamic> rawHostmap = json['staticHostmap'];
-    Map<String, StaticHost> staticHostmap = {};
-    rawHostmap.forEach((key, val) {
-      staticHostmap[key] = StaticHost.fromJson(val);
-    });
-
-    List<dynamic> rawUnsafeRoutes = json['unsafeRoutes'];
-    List<UnsafeRoute> unsafeRoutes = [];
-    for (var val in rawUnsafeRoutes) {
-      unsafeRoutes.add(UnsafeRoute.fromJson(val));
+    // Parse rawConfig from JSON string to map
+    Map<String, dynamic> rawConfig = {};
+    List<String> rawConfigErrors = [];
+    if (json['rawConfig'] is String && (json['rawConfig'] as String).isNotEmpty) {
+      try {
+        rawConfig = Map<String, dynamic>.from(jsonDecode(json['rawConfig']));
+      } catch (err) {
+        rawConfigErrors.add('Failed to parse rawConfig: $err');
+      }
     }
 
-    List<dynamic> rawDnsResolvers = json['dnsResolvers'] ?? [];
-    List<String> dnsResolvers = [];
-    for (var val in rawDnsResolvers) {
-      dnsResolvers.add(val.toString());
+    List<String> stringList(dynamic values) {
+      if (values is! List) return [];
+      return values.map((v) => v.toString()).toList();
     }
 
-    List<dynamic> rawCA = json['ca'];
+    List<String> excludedApps = stringList(json['excludedApps']);
+
+    List<dynamic> rawCA = json['ca'] ?? [];
     List<CertificateInfo> ca = [];
     for (var val in rawCA) {
       ca.add(CertificateInfo.fromJson(val));
@@ -222,8 +284,8 @@ class Site {
       certInfo = CertificateInfo.fromJson(json['cert']);
     }
 
-    List<dynamic> rawErrors = json["errors"];
-    List<String> errors = [];
+    List<dynamic> rawErrors = json["errors"] ?? [];
+    List<String> errors = List<String>.from(rawConfigErrors);
     for (var error in rawErrors) {
       errors.add(error);
     }
@@ -231,25 +293,24 @@ class Site {
     return {
       "name": json["name"],
       "id": json['id'],
-      "staticHostmap": staticHostmap,
+      "rawConfig": rawConfig,
       "ca": ca,
       "certInfo": certInfo,
-      "lhDuration": json['lhDuration'],
-      "port": json['port'],
-      "cipher": json['cipher'],
-      "sortKey": json['sortKey'],
-      "mtu": json['mtu'],
+      "sortKey": json['sortKey'] ?? 0,
+      "configVersion": json['configVersion'] ?? 0,
       "connected": json['connected'] ?? false,
       "status": json['status'] ?? "",
-      "logFile": json['logFile'],
-      "logVerbosity": json['logVerbosity'],
+      "logFile": json['logFile'] ?? "",
       "errors": errors,
-      "unsafeRoutes": unsafeRoutes,
       "managed": json['managed'] ?? false,
-      "rawConfig": json['rawConfig'],
       "lastManagedUpdate": json["lastManagedUpdate"] == null ? null : DateTime.parse(json["lastManagedUpdate"]),
-      "dnsResolvers": dnsResolvers,
       "alwaysOn": json['alwaysOn'] ?? false,
+      "excludedApps": excludedApps,
+      "dnsOverride": json['dnsOverride'] == null ? null : Map<String, dynamic>.from(json['dnsOverride']),
+      // Effective DNS resolved by the platform (keyed dnsResolvers/matchDomains
+      // in the platform Site serialization)
+      "effectiveDnsResolvers": stringList(json['dnsResolvers']),
+      "effectiveMatchDomains": stringList(json['matchDomains']),
     };
   }
 
@@ -258,29 +319,193 @@ class Site {
   }
 
   Map<String, dynamic> toJson() {
-    return {
+    final json = <String, dynamic>{
       'name': name,
       'id': id,
-      'staticHostmap': staticHostmap,
-      'unsafeRoutes': unsafeRoutes,
-      'ca': ca
-          .map((cert) {
-            return cert.rawCert;
-          })
-          .join('\n'),
-      'cert': certInfo?.rawCert,
-      'key': key,
-      'lhDuration': lhDuration,
-      'port': port,
-      'mtu': mtu,
-      'cipher': cipher,
       'sortKey': sortKey,
-      'logVerbosity': logVerbosity,
+      'configVersion': configVersion,
       'managed': managed,
-      'rawConfig': rawConfig,
-      'dnsResolvers': dnsResolvers,
+      'rawConfig': jsonEncode(rawConfig),
+      'key': key,
       'alwaysOn': alwaysOn,
+      'excludedApps': excludedApps,
     };
+    // Omitted when unset so the platform save path preserves any existing override
+    if (dnsOverride != null) {
+      json['dnsOverride'] = dnsOverride;
+    }
+    return json;
+  }
+
+  // Convenience getters for UI — read from rawConfig
+  int get port => _getConfigInt(['listen', 'port']) ?? 0;
+  int get mtu => _getConfigInt(['tun', 'mtu']) ?? 1300;
+  String get cipher => _getConfigString(['cipher']) ?? 'aes';
+  String get logVerbosity => _getConfigString(['logging', 'level']) ?? 'info';
+
+  /// Updates the certificate and private key, syncing the raw PEM into rawConfig.
+  void setCertificate(CertificateInfo info, String privateKey) {
+    certInfo = info;
+    key = privateKey;
+    if (info.rawCert != null) {
+      _setConfig(['pki', 'cert'], info.rawCert);
+    }
+  }
+
+  /// Updates the CA list, syncing the raw PEM strings into rawConfig.
+  void setCertificateAuthorities(List<CertificateInfo> cas) {
+    ca = cas;
+    final pem = cas.where((c) => c.rawCert != null).map((c) => c.rawCert!).join('\n');
+    if (pem.isNotEmpty) {
+      _setConfig(['pki', 'ca'], pem);
+    }
+  }
+
+  String get staticMapNetwork => _getConfigString(['static_map', 'network']) ?? 'ip4';
+  int get lhDuration => _getConfigInt(['lighthouse', 'interval']) ?? 0;
+
+  List<UnsafeRoute> get unsafeRoutes {
+    final routes = _getConfig<List<dynamic>>(['tun', 'unsafe_routes']);
+    if (routes == null) return [];
+    return routes.map((r) => UnsafeRoute.fromJson(Map<String, dynamic>.from(r))).toList();
+  }
+
+  // DNS settings read and write the device-local dnsOverride; managed DNS in
+  // rawConfig applies only while the override is not enabled
+  List<String> get dnsResolvers => _dnsOverrideList('resolvers');
+
+  Map<String, StaticHost> get staticHostmap {
+    final shm = _getConfig<Map<String, dynamic>>(['static_host_map']) ?? {};
+    final lhHosts = _getConfig<List<dynamic>>(['lighthouse', 'hosts']) ?? [];
+    final lhSet = lhHosts.map((h) => h.toString()).toSet();
+
+    Map<String, StaticHost> result = {};
+    shm.forEach((vpnIp, rawDests) {
+      List<String> dests = [];
+      if (rawDests is List) {
+        dests = rawDests.map((d) => d.toString()).toList();
+      }
+      result[vpnIp] = StaticHost.fromRawConfig(destinations: dests, lighthouse: lhSet.contains(vpnIp));
+    });
+
+    // Add any lighthouse hosts not in the static host map
+    for (var lh in lhSet) {
+      if (!result.containsKey(lh)) {
+        result[lh] = StaticHost.fromRawConfig(destinations: [], lighthouse: true);
+      }
+    }
+
+    return result;
+  }
+
+  // Convenience setters for UI — write into rawConfig
+  set port(int value) => _setConfig(['listen', 'port'], value);
+  set mtu(int value) => _setConfig(['tun', 'mtu'], value);
+  set cipher(String value) => _setConfig(['cipher'], value);
+  set logVerbosity(String value) => _setConfig(['logging', 'level'], value);
+  set staticMapNetwork(String value) => _setConfig(['static_map', 'network'], value);
+  set lhDuration(int value) => _setConfig(['lighthouse', 'interval'], value);
+
+  set unsafeRoutes(List<UnsafeRoute> routes) {
+    _setConfig(['tun', 'unsafe_routes'], routes.map((r) => r.toJson()).toList());
+  }
+
+  set dnsResolvers(List<String> resolvers) => _setDnsOverride('resolvers', resolvers);
+
+  List<String> get matchDomains => _dnsOverrideList('matchDomains');
+
+  set matchDomains(List<String> domains) => _setDnsOverride('matchDomains', domains);
+
+  List<String> _dnsOverrideList(String key) {
+    final values = dnsOverride?[key];
+    if (values is! List) return [];
+    return values.map((v) => v.toString()).toList();
+  }
+
+  // Writing any DNS setting enables the override so the values take effect on
+  // save. Empty values with no existing override are dropped: an enabled-empty
+  // override deliberately disables managed DNS, and the Advanced screen save
+  // path writes these setters unconditionally (seeded empty on managed sites).
+  void _setDnsOverride(String key, List<String> values) {
+    if (dnsOverride == null && values.isEmpty) return;
+    final override = dnsOverride ?? <String, dynamic>{};
+    override[key] = values;
+    override['enabled'] = true;
+    dnsOverride = override;
+  }
+
+  List<FirewallRule> get inboundFirewallRules {
+    final rules = _getConfig<List<dynamic>>(['firewall', 'inbound']);
+    if (rules == null) return [];
+    return rules.map((r) => FirewallRule.fromJson(Map<String, dynamic>.from(r))).toList();
+  }
+
+  set inboundFirewallRules(List<FirewallRule> rules) {
+    _setConfig(['firewall', 'inbound'], rules.map((r) => r.toJson()).toList());
+  }
+
+  List<FirewallRule> get outboundFirewallRules {
+    final rules = _getConfig<List<dynamic>>(['firewall', 'outbound']);
+    if (rules == null) return [];
+    return rules.map((r) => FirewallRule.fromJson(Map<String, dynamic>.from(r))).toList();
+  }
+
+  set outboundFirewallRules(List<FirewallRule> rules) {
+    _setConfig(['firewall', 'outbound'], rules.map((r) => r.toJson()).toList());
+  }
+
+  set staticHostmap(Map<String, StaticHost> hostmap) {
+    Map<String, List<String>> shm = {};
+    List<String> lhHosts = [];
+
+    hostmap.forEach((vpnIp, host) {
+      shm[vpnIp] = host.destinations.map((d) => d.toString()).toList();
+      if (host.lighthouse) {
+        lhHosts.add(vpnIp);
+      }
+    });
+
+    _setConfig(['static_host_map'], shm);
+    _setConfig(['lighthouse', 'hosts'], lhHosts);
+  }
+
+  // Helpers for reading/writing nested rawConfig values
+  T? _getConfig<T>(List<String> path) {
+    dynamic current = rawConfig;
+    for (var key in path) {
+      if (current is Map<String, dynamic> && current.containsKey(key)) {
+        current = current[key];
+      } else {
+        return null;
+      }
+    }
+    return current is T ? current : null;
+  }
+
+  int? _getConfigInt(List<String> path) {
+    final val = _getConfig<dynamic>(path);
+    if (val is int) return val;
+    if (val is double) return val.toInt();
+    if (val is String) return int.tryParse(val);
+    return null;
+  }
+
+  String? _getConfigString(List<String> path) {
+    final val = _getConfig<dynamic>(path);
+    return val?.toString();
+  }
+
+  void _setConfig(List<String> path, dynamic value) {
+    if (path.isEmpty) return;
+
+    Map<String, dynamic> current = rawConfig;
+    for (var i = 0; i < path.length - 1; i++) {
+      if (!current.containsKey(path[i]) || current[path[i]] is! Map<String, dynamic>) {
+        current[path[i]] = <String, dynamic>{};
+      }
+      current = current[path[i]] as Map<String, dynamic>;
+    }
+    current[path.last] = value;
   }
 
   Future<void> save() async {
@@ -288,7 +513,6 @@ class Site {
       var raw = jsonEncode(this);
       await platform.invokeMethod("saveSite", raw);
     } on PlatformException catch (err) {
-      //TODO: fix this message
       throw err.details ?? err.message ?? err.toString();
     } catch (err) {
       throw err.toString();
@@ -300,7 +524,6 @@ class Site {
       var raw = jsonEncode(this);
       return await platform.invokeMethod("nebula.renderConfig", raw);
     } on PlatformException catch (err) {
-      //TODO: fix this message
       throw err.details ?? err.message ?? err.toString();
     } catch (err) {
       throw err.toString();
@@ -321,7 +544,6 @@ class Site {
     try {
       await platform.invokeMethod("stopSite", <String, String>{"id": id});
     } on PlatformException catch (err) {
-      //TODO: fix this message
       throw err.details ?? err.message ?? err.toString();
     } catch (err) {
       throw err.toString();
@@ -343,7 +565,6 @@ class Site {
 
       return hosts;
     } on PlatformException catch (err) {
-      //TODO: fix this message
       throw err.details ?? err.message ?? err.toString();
     } catch (err) {
       throw err.toString();
@@ -438,269 +659,21 @@ class Site {
   }
 }
 
-List<String> _fromYamlLighthouse(Site site, YamlMap yaml) {
-  List<String> lighthouses = [];
-
-  if (!yaml.containsKey('lighthouse')) {
-    return [];
-  }
-
-  if (yaml['lighthouse'] is! YamlMap) {
-    site.errors.add('lighthouse was not a yaml map');
-    return [];
-  }
-
-  final yamlLighthouse = yaml['lighthouse'] as YamlMap;
-  if (yamlLighthouse.containsKey('interval')) {
-    final (duration, ok) = Utils.dynamicToInt(yamlLighthouse['interval']);
-    if (ok) {
-      site.lhDuration = duration;
-    } else {
-      site.errors.add('lighthouse.interval could not be parsed as an integer');
-    }
-  }
-
-  if (yamlLighthouse.containsKey('hosts')) {
-    if (yamlLighthouse['hosts'] is YamlList) {
-      final yamlLighthouseHosts = yamlLighthouse['hosts'] as YamlList;
-      for (var s in yamlLighthouseHosts) {
-        if (s is String) {
-          final (valid, _) = ipValidator(s);
-          if (valid) {
-            lighthouses.add(s);
-          } else {
-            site.errors.add('lighthouse.hosts entry was not a valid ip address: $s');
-          }
-        } else {
-          site.errors.add('lighthouse.hosts entry was not a string: $s');
-        }
-      }
-    } else {
-      site.errors.add('lighthouse.hosts was not a yaml list');
-    }
-  }
-
-  return lighthouses;
-}
-
-void _fromYamlStaticHostmap(Site site, List<String> lighthouses, YamlMap yaml) {
-  if (!yaml.containsKey('static_host_map')) {
-    return;
-  }
-
-  if (yaml['static_host_map'] is! YamlMap) {
-    site.errors.add('static_host_map was not a yaml map');
-    return;
-  }
-
-  final yamlStaticHostMap = yaml['static_host_map'] as YamlMap;
-  yamlStaticHostMap.forEach((yamlVpnAddr, yamlDestinations) {
-    String vpnAddr = '';
-    if (yamlVpnAddr is String) {
-      final (valid, _) = ipValidator(yamlVpnAddr);
-      if (!valid) {
-        site.errors.add('invalid vpn address in static_host_map: $yamlVpnAddr');
-        return;
-      }
-      vpnAddr = yamlVpnAddr;
-    } else {
-      site.errors.add('static_host_map key was not a string: $yamlVpnAddr');
-      return;
-    }
-
-    List<IPAndPort> destinations = [];
-    if (yamlDestinations is YamlList) {
-      for (var hostPort in yamlDestinations) {
-        if (hostPort is String) {
-          try {
-            destinations.add(IPAndPort.fromString(hostPort));
-          } on ParseError catch (err) {
-            site.errors.add('static_host_map destination $hostPort for $vpnAddr was not valid: ${err.message}');
-          }
-        } else {
-          site.errors.add('static_host_map destination for $vpnAddr was not a string: $hostPort');
-        }
-      }
-    } else {
-      site.errors.add('static_host_map destinations for $vpnAddr was not a list of strings');
-    }
-
-    site.staticHostmap[vpnAddr] = StaticHost(lighthouse: lighthouses.contains(vpnAddr), destinations: destinations);
+/// Recursively converts a YamlMap/YamlList to plain Dart Map/List.
+Map<String, dynamic> _yamlToMap(YamlMap yaml) {
+  Map<String, dynamic> result = {};
+  yaml.forEach((key, value) {
+    result[key.toString()] = _yamlValueToDart(value);
   });
+  return result;
 }
 
-Future<void> _fromYamlPki(Site site, MethodChannel platform, YamlMap yaml) async {
-  if (!yaml.containsKey('pki')) {
-    return;
-  }
-
-  if (yaml['pki'] is! YamlMap) {
-    site.errors.add('pki was not a yaml map');
-    return;
-  }
-
-  final yamlPki = yaml['pki'] as YamlMap;
-  if (yamlPki.containsKey('key')) {
-    if (yamlPki['key'] is String) {
-      site.key = yamlPki['key'] as String;
-    } else {
-      site.errors.add('pki.key was not a string');
-    }
-  }
-
-  if (yamlPki.containsKey('ca')) {
-    if (yamlPki['ca'] is String) {
-      try {
-        var rawCaInfo = await platform.invokeMethod("nebula.parseCerts", <String, String>{
-          "certs": yamlPki['ca'] as String,
-        });
-        List<dynamic> rawCas = jsonDecode(rawCaInfo);
-        var i = 0;
-        for (var rawCa in rawCas) {
-          i++;
-          try {
-            site.ca.add(CertificateInfo.fromJson(rawCa));
-          } on ParseError catch (err) {
-            site.errors.add('skipping ca $i due to error: ${err.message}');
-          }
-        }
-      } on PlatformException catch (err) {
-        site.errors.add('could not parse pki.ca: ${err.message}');
-      }
-    } else {
-      site.errors.add('pki.ca was not a string');
-    }
-  }
-
-  if (yamlPki.containsKey('cert')) {
-    if (yamlPki['cert'] is String) {
-      try {
-        var rawCertInfo = await platform.invokeMethod("nebula.parseCerts", <String, String>{
-          "certs": yamlPki['cert'] as String,
-        });
-        List<dynamic> rawCerts = jsonDecode(rawCertInfo);
-        for (var rawCert in rawCerts) {
-          try {
-            site.certInfo = CertificateInfo.fromJson(rawCert);
-          } on ParseError catch (err) {
-            site.errors.add('skipping cert due to error: ${err.message}');
-          }
-        }
-      } on PlatformException catch (err) {
-        site.errors.add('could not parse pki.cert: ${err.message}');
-      }
-    } else {
-      site.errors.add('pki.cert was not a string');
-    }
-  }
-}
-
-void _fromYamlUnsafeRoutes(Site site, YamlMap yaml) {
-  if (!yaml.containsKey('unsafe_routes')) {
-    return;
-  }
-
-  if (yaml['unsafe_routes'] is! YamlList) {
-    site.errors.add('unsafe_routes was not a yaml list');
-    return;
-  }
-
-  final yamlUnsafeRoutes = yaml['unsafe_routes'] as YamlList;
-  var i = 0;
-  for (var yamlRoute in yamlUnsafeRoutes) {
-    i++;
-    try {
-      site.unsafeRoutes.add(UnsafeRoute.fromYaml(yamlRoute));
-    } on ParseError catch (err) {
-      site.errors.add('failed to parse unsafe route $i: ${err.message}');
-    }
-  }
-}
-
-void _fromYamlCipher(Site site, YamlMap yaml) {
-  if (!yaml.containsKey('cipher')) {
-    return;
-  }
-
-  if (yaml['cipher'] is! String) {
-    site.errors.add('cipher was not a string');
-    return;
-  }
-
-  final yamlCipher = (yaml['cipher'] as String).toLowerCase();
-  if (_validCiphers.contains(yamlCipher)) {
-    site.cipher = yamlCipher;
+dynamic _yamlValueToDart(dynamic value) {
+  if (value is YamlMap) {
+    return _yamlToMap(value);
+  } else if (value is YamlList) {
+    return value.map((v) => _yamlValueToDart(v)).toList();
   } else {
-    site.errors.add('cipher was not valid: $yamlCipher');
-  }
-}
-
-void _fromYamlTun(Site site, YamlMap yaml) {
-  if (!yaml.containsKey('tun')) {
-    return;
-  }
-
-  if (yaml['tun'] is! YamlMap) {
-    site.errors.add('tun was not a yaml map');
-    return;
-  }
-
-  final yamlTun = yaml['tun'] as YamlMap;
-  if (yamlTun.containsKey('mtu')) {
-    final (mtu, valid) = Utils.dynamicToInt(yamlTun['mtu']);
-    if (valid) {
-      site.mtu = mtu;
-    } else {
-      site.errors.add('tun.mtu was not a number: ${yamlTun['mtu']}');
-    }
-  }
-}
-
-void _fromYamlListen(Site site, YamlMap yaml) {
-  if (!yaml.containsKey('listen')) {
-    return;
-  }
-
-  if (yaml['listen'] is! YamlMap) {
-    site.errors.add('listen was not a yaml map');
-    return;
-  }
-
-  final yamlListen = yaml['listen'] as YamlMap;
-  if (yamlListen.containsKey('port')) {
-    final (port, valid) = Utils.dynamicToInt(yamlListen['port']);
-    if (valid) {
-      site.port = port;
-    } else {
-      site.errors.add('listen.port was not a number: ${yamlListen['port']}');
-    }
-  }
-}
-
-void _fromYamlLogging(Site site, YamlMap yaml) {
-  if (!yaml.containsKey('logging')) {
-    return;
-  }
-
-  if (yaml['logging'] is! YamlMap) {
-    site.errors.add('logging was not a yaml map');
-    return;
-  }
-
-  final yamlLogging = yaml['logging'] as YamlMap;
-  if (!yamlLogging.containsKey('level')) {
-    return;
-  }
-
-  if (yamlLogging['level'] is! String) {
-    site.errors.add('logging.level was not a string');
-    return;
-  }
-
-  final yamlLevel = (yamlLogging['level'] as String).toLowerCase();
-  if (_validLogLevels.contains(yamlLevel)) {
-    site.logVerbosity = yamlLevel;
-  } else {
-    site.errors.add('logging.level was not valid: $yamlLevel');
+    return value;
   }
 }

@@ -45,16 +45,24 @@ class DNUpdater {
 
       let credentials = try site.getDNCredentials()
 
-      let newSite: IncomingSite?
+      guard let nebulaCert = site.cert?.rawCert else {
+        throw SiteError.noCertificate
+      }
+
+      let nebulaKey = try site.getKey()
+
+      let newSiteJson: String?
       do {
-        newSite = try apiClient.tryUpdate(
+        newSiteJson = try apiClient.tryUpdate(
           siteName: site.name,
           hostID: credentials.hostID,
           privateKey: credentials.privateKey,
           counter: credentials.counter,
-          trustedKeys: credentials.trustedKeys
+          trustedKeys: credentials.trustedKeys,
+          nebulaCert: nebulaCert,
+          nebulaKey: nebulaKey
         )
-      } catch (APIClientError.invalidCredentials) {
+      } catch APIClientError.invalidCredentials {
         if !credentials.invalid {
           try site.invalidateDNCredentials()
           log.notice("Invalidated credentials in site: \(site.name, privacy: .public)")
@@ -63,19 +71,32 @@ class DNUpdater {
         return
       }
 
-      let siteManager = site.manager
-      let shouldSaveToManager =
-        siteManager != nil
-        || ProcessInfo().isOperatingSystemAtLeast(
-          OperatingSystemVersion(majorVersion: 17, minorVersion: 0, patchVersion: 0))
+      if let newSiteJson = newSiteJson {
+        let siteManager = site.manager
+        let shouldSaveToManager =
+          siteManager != nil
+          || ProcessInfo().isOperatingSystemAtLeast(
+            OperatingSystemVersion(majorVersion: 17, minorVersion: 0, patchVersion: 0))
 
-      newSite?.save(manager: site.manager, saveToManager: shouldSaveToManager) { error in
-        if error != nil {
-          self.log.error("failed to save update: \(error!.localizedDescription, privacy: .public)")
+        saveSite(
+          jsonString: newSiteJson, manager: site.manager, existingSite: site,
+          saveToManager: shouldSaveToManager
+        ) { error in
+          if error != nil {
+            self.log.error(
+              "failed to save update: \(error!.localizedDescription, privacy: .public)")
+          }
+
+          // Reload site from disk and notify
+          do {
+            let configPath = try SiteList.getSiteConfigFile(id: site.id, createDir: false)
+            let newSite = try Site(path: configPath)
+            onUpdate(newSite)
+          } catch {
+            self.log.error(
+              "failed to reload site: \(error.localizedDescription, privacy: .public)")
+          }
         }
-
-        // reload nebula even if we couldn't save the vpn profile
-        onUpdate(Site(incoming: newSite!))
       }
 
       if credentials.invalid {

@@ -1,20 +1,18 @@
 import 'dart:convert';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_platform_widgets/flutter_platform_widgets.dart';
 import 'package:mobile_nebula/components/config/config_button_item.dart';
 import 'package:mobile_nebula/components/config/config_item.dart';
 import 'package:mobile_nebula/components/config/config_section.dart';
 import 'package:mobile_nebula/components/config/config_text_item.dart';
+import 'package:mobile_nebula/components/pill_segmented_button.dart';
 import 'package:mobile_nebula/components/simple_page.dart';
 import 'package:mobile_nebula/models/certificate.dart';
 import 'package:mobile_nebula/screens/siteConfig/scan_qr_screen.dart';
 import 'package:mobile_nebula/services/share.dart';
 import 'package:mobile_nebula/services/utils.dart';
 
-import '../../components/buttons/primary_button.dart';
 import 'certificate_details_screen.dart';
 
 class CertificateResult {
@@ -117,26 +115,23 @@ class AddCertificateScreenState extends State<AddCertificateScreen> {
   }
 
   List<Widget> _buildLoadCert() {
-    Map<String, Widget> children = {'paste': Text('Copy/Paste'), 'file': Text('File')};
-
-    // not all devices have a camera for QR codes
-    if (widget.supportsQRScanning) {
-      children['qr'] = Text('QR Code');
-    }
+    final segments = <({String value, Widget label})>[
+      (value: 'paste', label: Text('Copy/Paste')),
+      (value: 'file', label: Text('File')),
+      if (widget.supportsQRScanning) (value: 'qr', label: Text('QR Code')),
+    ];
 
     List<Widget> items = [
       Padding(
         padding: EdgeInsets.fromLTRB(10, 25, 10, 0),
-        child: CupertinoSlidingSegmentedControl(
-          groupValue: inputType,
-          onValueChanged: (v) {
-            if (v != null) {
-              setState(() {
-                inputType = v;
-              });
-            }
+        child: PillSegmentedButton<String>(
+          selected: {inputType},
+          onSelectionChanged: (v) {
+            setState(() {
+              inputType = v.first;
+            });
           },
-          children: children,
+          segments: segments,
         ),
       ),
     ];
@@ -158,7 +153,7 @@ class AddCertificateScreenState extends State<AddCertificateScreen> {
         padding: EdgeInsets.only(top: 20, bottom: 10, left: 10, right: 10),
         child: SizedBox(
           width: double.infinity,
-          child: PrimaryButton(
+          child: FilledButton(
             child: Text('Show/Import Private Key'),
             onPressed: () => Utils.confirmDelete(context, 'Show/Import Private Key?', () {
               setState(() {
@@ -228,10 +223,7 @@ class AddCertificateScreenState extends State<AddCertificateScreen> {
           ConfigButtonItem(
             content: Text('Scan a QR code'),
             onPressed: () async {
-              var result = await Navigator.push(
-                context,
-                platformPageRoute(context: context, builder: (context) => ScanQRScreen()),
-              );
+              var result = await Navigator.push(context, MaterialPageRoute(builder: (context) => ScanQRScreen()));
               if (result != null) {
                 _addCertEntry(result);
               }

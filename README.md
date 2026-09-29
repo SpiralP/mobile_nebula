@@ -8,7 +8,7 @@ Install all of the following things:
 
 - [`xcode`](https://apps.apple.com/us/app/xcode/) - use the version specified by `xcode_select` in `/ios/fastlane/Fastfile`
 - [`android-studio`](https://developer.android.com/studio)
-- [`flutter` 3.38.9](https://docs.flutter.dev/get-started/install)
+- [`flutter` 3.44.6](https://docs.flutter.dev/get-started/install)
 - [`gomobile`](https://pkg.go.dev/golang.org/x/mobile/cmd/gomobile)
 - [Flutter Android Studio Extension](https://docs.flutter.dev/get-started/editor?tab=androidstudio)
 
@@ -28,7 +28,26 @@ Run `flutter doctor` and fix everything it complains before proceeding
 - Make sure you have `gem` installed with `sudo gem install`
 - If on MacOS arm, `sudo gem install ffi -- --enable-libffi-alloc`
 
-If you are having issues with iOS pods, try blowing it all away! `cd ios && rm -rf Pods/ Podfile.lock && pod install --repo-update`
+If the iOS build complains that MobileNebula.xcframework is stale or missing, run `./ensure-mobile-nebula.sh` from the repo root. It rebuilds the gomobile framework only when the Go code in `nebula/` changes, Xcode runs it automatically as a pre-build action on the Runner scheme.
+
+### Building from Xcode after a flutter command
+
+`flutter pub get`, `flutter test` and friends rewrite the generated plugin package with flutter's own iOS 13 minimum,
+which SPM then rejects because file_picker needs 14:
+
+```
+error: The package product 'file-picker' requires minimum platform version 14.0 for the iOS platform,
+but this target supports 13.0
+```
+
+Only a flutter CLI build puts it back, so run this before building in Xcode:
+
+```sh
+flutter build ios --config-only
+```
+
+`ensure-mobile-nebula.sh` also does it, but Xcode resolves packages before pre-actions run, so it only helps the next
+build. Skip the command and the first build fails, the second works.
 
 # Formatting
 

@@ -1,16 +1,19 @@
-import 'package:flutter/cupertino.dart';
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:mobile_nebula/components/app_text_form_field.dart';
 import 'package:mobile_nebula/components/config/config_item.dart';
 import 'package:mobile_nebula/components/config/config_page_item.dart';
 import 'package:mobile_nebula/components/config/config_section.dart';
 import 'package:mobile_nebula/components/form_page.dart';
-import 'package:mobile_nebula/components/platform_text_form_field.dart';
 import 'package:mobile_nebula/models/site.dart';
 import 'package:mobile_nebula/models/unsafe_route.dart';
 import 'package:mobile_nebula/screens/siteConfig/cipher_screen.dart';
+import 'package:mobile_nebula/screens/siteConfig/dns_lookup_screen.dart';
 import 'package:mobile_nebula/screens/siteConfig/dns_resolvers_screen.dart';
+import 'package:mobile_nebula/screens/siteConfig/excluded_apps_screen.dart';
 import 'package:mobile_nebula/screens/siteConfig/log_verbosity_screen.dart';
 import 'package:mobile_nebula/screens/siteConfig/rendered_config_screen.dart';
 import 'package:mobile_nebula/services/utils.dart';
@@ -30,6 +33,9 @@ class Advanced {
   List<UnsafeRoute> unsafeRoutes;
   int mtu;
   List<String> dnsResolvers;
+  List<String> matchDomains;
+  List<String> excludedApps;
+  String staticMapNetwork;
 
   Advanced({
     required this.lhDuration,
@@ -39,6 +45,9 @@ class Advanced {
     required this.unsafeRoutes,
     required this.mtu,
     required this.dnsResolvers,
+    required this.matchDomains,
+    required this.excludedApps,
+    required this.staticMapNetwork,
   });
 }
 
@@ -66,12 +75,21 @@ class AdvancedScreenState extends State<AdvancedScreen> {
       unsafeRoutes: widget.site.unsafeRoutes,
       mtu: widget.site.mtu,
       dnsResolvers: widget.site.dnsResolvers,
+      matchDomains: widget.site.matchDomains,
+      excludedApps: widget.site.excludedApps,
+      staticMapNetwork: widget.site.staticMapNetwork,
     );
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Managed sites show the effective DNS resolved by the platform (read-only);
+    // settings holds only the device-local override, which seeds empty when the
+    // managed definednet.dns config is in effect
+    final dnsResolvers = widget.site.managed ? widget.site.effectiveDnsResolvers : settings.dnsResolvers;
+    final matchDomains = widget.site.managed ? widget.site.effectiveMatchDomains : settings.matchDomains;
+
     return FormPage(
       title: 'Advanced Settings',
       changed: changed,
@@ -89,7 +107,7 @@ class AdvancedScreenState extends State<AdvancedScreen> {
                 //TODO: Auto select on focus?
                 content: widget.site.managed
                     ? Text("${settings.lhDuration} seconds", textAlign: TextAlign.right)
-                    : PlatformTextFormField(
+                    : AppTextFormField(
                         initialValue: settings.lhDuration.toString(),
                         keyboardType: TextInputType.number,
                         suffix: Text("seconds"),
@@ -111,7 +129,7 @@ class AdvancedScreenState extends State<AdvancedScreen> {
                 //TODO: Auto select on focus?
                 content: widget.site.managed
                     ? Text(settings.port.toString(), textAlign: TextAlign.right)
-                    : PlatformTextFormField(
+                    : AppTextFormField(
                         initialValue: settings.port.toString(),
                         keyboardType: TextInputType.number,
                         textAlign: TextAlign.right,
@@ -131,7 +149,7 @@ class AdvancedScreenState extends State<AdvancedScreen> {
                 labelWidth: 150,
                 content: widget.site.managed
                     ? Text(settings.mtu.toString(), textAlign: TextAlign.right)
-                    : PlatformTextFormField(
+                    : AppTextFormField(
                         initialValue: settings.mtu.toString(),
                         keyboardType: TextInputType.number,
                         textAlign: TextAlign.right,
@@ -207,11 +225,12 @@ class AdvancedScreenState extends State<AdvancedScreen> {
               ConfigPageItem(
                 label: Text('DNS resolvers'),
                 labelWidth: 150,
-                content: Text(Utils.itemCountFormat(settings.dnsResolvers.length), textAlign: TextAlign.end),
+                content: Text(Utils.itemCountFormat(dnsResolvers.length), textAlign: TextAlign.end),
                 onPressed: () {
                   Utils.openPage(context, (context) {
                     return DnsResolversScreen(
-                      dnsResolvers: settings.dnsResolvers,
+                      dnsResolvers: dnsResolvers,
+                      matchDomains: matchDomains,
                       onSave: widget.site.managed
                           ? null
                           : (resolvers) {
@@ -220,16 +239,65 @@ class AdvancedScreenState extends State<AdvancedScreen> {
                                 changed = true;
                               });
                             },
+                      onSaveMatchDomains: widget.site.managed
+                          ? null
+                          : (domains) {
+                              setState(() {
+                                settings.matchDomains = domains;
+                                changed = true;
+                              });
+                            },
                     );
                   });
                 },
               ),
+              ConfigPageItem(
+                disabled: widget.site.managed,
+                label: Text('DNS lookup mode'),
+                labelWidth: 150,
+                content: Text(settings.staticMapNetwork, textAlign: TextAlign.end),
+                onPressed: () {
+                  Utils.openPage(context, (context) {
+                    return DnsLookupScreen(
+                      staticMapNetwork: settings.staticMapNetwork,
+                      onSave: (staticMapNetwork) {
+                        setState(() {
+                          settings.staticMapNetwork = staticMapNetwork;
+                          changed = true;
+                        });
+                      },
+                    );
+                  });
+                },
+              ),
+              if (Platform.isAndroid)
+                ConfigPageItem(
+                  label: Text('Excluded apps'),
+                  labelWidth: 150,
+                  content: Text(
+                    settings.excludedApps.isEmpty ? 'None' : Utils.itemCountFormat(settings.excludedApps.length),
+                    textAlign: TextAlign.end,
+                  ),
+                  onPressed: () {
+                    Utils.openPage(context, (context) {
+                      return ExcludedAppsScreen(
+                        excludedApps: settings.excludedApps,
+                        onSave: (apps) {
+                          setState(() {
+                            settings.excludedApps = apps;
+                            changed = true;
+                          });
+                        },
+                      );
+                    });
+                  },
+                ),
             ],
           ),
           ConfigSection(
             children: <Widget>[
               ConfigPageItem(
-                content: Text('View rendered config'),
+                label: Text('View rendered config'),
                 onPressed: () async {
                   try {
                     var config = await widget.site.renderConfig();

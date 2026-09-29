@@ -1,15 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_platform_widgets/flutter_platform_widgets.dart';
 import 'package:mobile_nebula/components/config/config_item.dart';
 import 'package:mobile_nebula/components/config/config_page_item.dart';
 import 'package:mobile_nebula/components/config/config_section.dart';
+import 'package:mobile_nebula/components/danger_button.dart';
 import 'package:mobile_nebula/components/simple_page.dart';
-import 'package:mobile_nebula/models/hostinfo.dart';
 import 'package:mobile_nebula/models/site.dart';
 import 'package:mobile_nebula/screens/siteConfig/site_config_screen.dart';
 import 'package:mobile_nebula/screens/site_logs_screen.dart';
@@ -17,7 +15,6 @@ import 'package:mobile_nebula/screens/site_tunnels_screen.dart';
 import 'package:mobile_nebula/services/utils.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 
-import '../components/danger_button.dart';
 import '../components/site_title.dart';
 
 //TODO: If the site isn't active, don't respond to reloads on hostmaps
@@ -130,8 +127,8 @@ class SiteDetailScreenState extends State<SiteDetailScreen> {
 
     return ConfigSection(
       label: 'ERRORS',
-      borderColor: CupertinoColors.systemRed.resolveFrom(context),
-      labelColor: CupertinoColors.systemRed.resolveFrom(context),
+      borderColor: Theme.of(context).colorScheme.error,
+      labelColor: Theme.of(context).colorScheme.error,
       children: items,
     );
   }
@@ -159,10 +156,7 @@ class SiteDetailScreenState extends State<SiteDetailScreen> {
             children: <Widget>[
               Padding(
                 padding: EdgeInsets.only(right: 5),
-                child: Text(
-                  widget.site.status,
-                  style: TextStyle(color: CupertinoColors.secondaryLabel.resolveFrom(context)),
-                ),
+                child: Text(widget.site.status, style: Theme.of(context).textTheme.titleMedium!),
               ),
               Switch.adaptive(
                 value: widget.site.connected,
@@ -188,13 +182,13 @@ class SiteDetailScreenState extends State<SiteDetailScreen> {
     Widget active, pending;
 
     if (activeHosts == null) {
-      active = SizedBox(height: 20, width: 20, child: PlatformCircularProgressIndicator());
+      active = SizedBox(height: 20, width: 20, child: CircularProgressIndicator.adaptive());
     } else {
       active = Text(Utils.itemCountFormat(activeHosts!.length, singleSuffix: "tunnel", multiSuffix: "tunnels"));
     }
 
     if (pendingHosts == null) {
-      pending = SizedBox(height: 20, width: 20, child: PlatformCircularProgressIndicator());
+      pending = SizedBox(height: 20, width: 20, child: CircularProgressIndicator.adaptive());
     } else {
       pending = Text(Utils.itemCountFormat(pendingHosts!.length, singleSuffix: "tunnel", multiSuffix: "tunnels"));
     }
@@ -255,7 +249,7 @@ class SiteDetailScreenState extends State<SiteDetailScreen> {
       children: <Widget>[
         ConfigPageItem(
           crossAxisAlignment: CrossAxisAlignment.center,
-          content: Text('Configuration'),
+          label: Text('Configuration'),
           onPressed: () {
             Utils.openPage(context, (context) {
               return SiteConfigScreen(
@@ -302,7 +296,7 @@ class SiteDetailScreenState extends State<SiteDetailScreen> {
             ),
           ),
           ConfigPageItem(
-            content: Text('Verify system always-on is enabled'),
+            label: Text('Verify system always-on is enabled'),
             onPressed: () {
               platform.invokeMethod('android.openVpnSettings');
             },

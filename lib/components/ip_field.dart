@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_nebula/components/special_text_field.dart';
 
@@ -16,6 +16,7 @@ class IPField extends StatelessWidget {
   final TextEditingController? controller;
   final TextAlign textAlign;
   final bool autoSize;
+  final bool enabled;
 
   const IPField({
     super.key,
@@ -30,11 +31,12 @@ class IPField extends StatelessWidget {
     this.controller,
     this.textAlign = TextAlign.center,
     this.autoSize = true,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    var textStyle = CupertinoTheme.of(context).textTheme.textStyle;
+    var textStyle = Theme.of(context).textTheme.labelLarge!;
     final double? ipWidth = ipOnly ? Utils.textSize("000000000000000", textStyle).width + 12 : null;
 
     final child = SpecialTextField(
@@ -51,6 +53,7 @@ class IPField extends StatelessWidget {
           : [FilteringTextInputFormatter.allow(RegExp(r'[^\s]+'))],
       textInputAction: textInputAction,
       placeholder: help,
+      enabled: enabled,
     );
 
     if (autoSize) {

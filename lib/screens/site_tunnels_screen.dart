@@ -1,9 +1,7 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_nebula/components/config/config_page_item.dart';
 import 'package:mobile_nebula/components/config/config_section.dart';
 import 'package:mobile_nebula/components/simple_page.dart';
-import 'package:mobile_nebula/models/hostinfo.dart';
 import 'package:mobile_nebula/models/site.dart';
 import 'package:mobile_nebula/screens/hostinfo_screen.dart';
 import 'package:mobile_nebula/services/utils.dart';
@@ -54,8 +52,8 @@ class SiteTunnelsScreenState extends State<SiteTunnelsScreen> {
     final List<ConfigPageItem> children = tunnels.map((hostInfo) {
       final isLh = _isLighthouse(hostInfo.vpnAddrs);
       final icon = switch (isLh) {
-        true => Icon(Icons.lightbulb_outline, color: CupertinoColors.placeholderText.resolveFrom(context)),
-        false => Icon(Icons.computer, color: CupertinoColors.placeholderText.resolveFrom(context)),
+        true => Icon(Icons.lightbulb_outline, color: Theme.of(context).hintColor),
+        false => Icon(Icons.computer, color: Theme.of(context).hintColor),
       };
 
       return (ConfigPageItem(
@@ -77,7 +75,15 @@ class SiteTunnelsScreenState extends State<SiteTunnelsScreen> {
           child: Row(
             children: <Widget>[
               Padding(padding: EdgeInsets.only(right: 10), child: icon),
-              Text(hostInfo.cert?.name ?? hostInfo.vpnAddrs[0]),
+              Expanded(child: Text(hostInfo.cert?.name ?? hostInfo.vpnAddrs[0], overflow: TextOverflow.ellipsis)),
+              if (hostInfo.isRelayed)
+                Tooltip(
+                  message: 'Relayed through ${hostInfo.currentRelaysToMe.join(', ')}',
+                  child: Padding(
+                    padding: EdgeInsets.only(left: 10),
+                    child: Icon(Icons.alt_route, size: 18, color: Theme.of(context).hintColor),
+                  ),
+                ),
             ],
           ),
         ),

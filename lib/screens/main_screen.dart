@@ -2,11 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_platform_widgets/flutter_platform_widgets.dart';
 import 'package:logging/logging.dart';
 import 'package:mobile_nebula/components/simple_page.dart';
 import 'package:mobile_nebula/components/site_item.dart';
@@ -20,9 +18,6 @@ import 'package:uuid/uuid.dart';
 import 'package:yaml/yaml.dart';
 
 import '../models/certificate.dart';
-import '../models/ip_and_port.dart';
-import '../models/static_hosts.dart';
-import '../models/unsafe_route.dart';
 import 'enrollment_screen.dart';
 
 final _log = Logger('main_screen');
@@ -92,17 +87,10 @@ class MainScreenState extends State<MainScreen> {
     return SimplePage(
       title: Text('Nebula'),
       scrollable: SimpleScrollable.vertical,
-      leadingAction: PlatformIconButton(
+      leadingAction: IconButton(
         padding: EdgeInsets.zero,
         icon: Icon(Icons.add, size: 28.0),
-        onPressed: () => showModalBottomSheet(
-          context: context,
-          useRootNavigator: true,
-          useSafeArea: true,
-          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-          isScrollControlled: true,
-          builder: _buildAddSite,
-        ),
+        onPressed: () => _showAddSiteSheet(context),
       ),
       refreshController: refreshController,
       onRefresh: () {
@@ -110,7 +98,7 @@ class MainScreenState extends State<MainScreen> {
         refreshController.refreshCompleted();
       },
       trailingActions: <Widget>[
-        PlatformIconButton(
+        IconButton(
           padding: EdgeInsets.zero,
           icon: Icon(Icons.adaptive.more, size: 28.0),
           onPressed: () => Utils.openPage(context, (_) => SettingsScreen()),
@@ -186,12 +174,7 @@ class MainScreenState extends State<MainScreen> {
       scrollController: scrollController,
       padding: EdgeInsets.symmetric(vertical: 5),
       children: items,
-      onReorder: (oldI, newI) async {
-        if (oldI < newI) {
-          // removing the item at oldIndex will shorten the list by 1.
-          newI -= 1;
-        }
-
+      onReorderItem: (oldI, newI) async {
         setState(() {
           final Site moved = sites.removeAt(oldI);
           sites.insert(newI, moved);
@@ -215,15 +198,35 @@ class MainScreenState extends State<MainScreen> {
       },
     );
 
-    if (Platform.isIOS) {
-      child = CupertinoTheme(data: CupertinoTheme.of(context), child: child);
-    }
-
     // The theme here is to remove the hardcoded canvas border reordering forces on us
     return Theme(
       data: Theme.of(context).copyWith(canvasColor: Colors.transparent),
       child: child,
     );
+  }
+
+  void _showAddSiteSheet(BuildContext context) {
+    final isTablet = MediaQuery.of(context).size.shortestSide >= 600;
+
+    if (isTablet) {
+      showDialog(
+        context: context,
+        useRootNavigator: true,
+        builder: (dialogContext) => Dialog(
+          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+          child: ConstrainedBox(constraints: BoxConstraints(maxWidth: 400), child: _buildAddSite(dialogContext)),
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        useRootNavigator: true,
+        useSafeArea: true,
+        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        isScrollControlled: true,
+        builder: _buildAddSite,
+      );
+    }
   }
 
   Widget _buildAddSite(BuildContext context) {
@@ -290,10 +293,13 @@ class MainScreenState extends State<MainScreen> {
       ),
       ListTile(
         title: Text('Enroll with defined.net'),
-        subtitle: Text('Join your organizations network'),
+        subtitle: Text('Join a Managed Nebula network'),
         trailing: arrowIcon,
-        onTap: () =>
-            Utils.openPage(context, (context) => EnrollmentScreen(stream: widget.dnEnrollStream, allowCodeEntry: true)),
+        onTap: () {
+          // Remove the modal
+          Navigator.pop(context);
+          Utils.openPage(context, (context) => EnrollmentScreen(stream: widget.dnEnrollStream, allowCodeEntry: true));
+        },
       ),
     ];
 
@@ -307,66 +313,57 @@ class MainScreenState extends State<MainScreen> {
 
     final borderColor = Theme.of(context).colorScheme.outlineVariant;
 
-    return DraggableScrollableSheet(
-      expand: false,
-      builder: (context, scrollController) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: EdgeInsetsGeometry.all(32),
-              child: Text('Add Site', style: Theme.of(context).listTileTheme.titleTextStyle!.copyWith(fontSize: 18)),
-            ),
-            Flexible(
-              child: SafeArea(
-                child: ListView(
-                  controller: scrollController,
-                  padding: EdgeInsetsGeometry.fromLTRB(32, 0, 32, 32),
-                  children: List.generate(children.length, (index) {
-                    final borderSide = BorderSide(color: borderColor);
-                    if (index == 0) {
-                      return Container(
-                        clipBehavior: Clip.antiAlias,
-                        decoration: BoxDecoration(
-                          border: Border(top: borderSide, left: borderSide, right: borderSide),
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(8),
-                            topRight: Radius.circular(8),
-                          ),
-                        ),
-                        child: children[index],
-                      );
-                    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: EdgeInsetsGeometry.all(32),
+          child: Text('Add Site', style: Theme.of(context).listTileTheme.titleTextStyle!.copyWith(fontSize: 18)),
+        ),
+        Flexible(
+          child: SafeArea(
+            child: ListView(
+              shrinkWrap: true,
+              padding: EdgeInsetsGeometry.fromLTRB(32, 0, 32, 32),
+              children: List.generate(children.length, (index) {
+                final borderSide = BorderSide(color: borderColor);
+                if (index == 0) {
+                  return Container(
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      border: Border(top: borderSide, left: borderSide, right: borderSide),
+                      borderRadius: const BorderRadius.only(topLeft: Radius.circular(8), topRight: Radius.circular(8)),
+                    ),
+                    child: children[index],
+                  );
+                }
 
-                    if (index == children.length - 1) {
-                      return Container(
-                        clipBehavior: Clip.antiAlias,
-                        decoration: BoxDecoration(
-                          border: Border.fromBorderSide(borderSide),
-                          borderRadius: const BorderRadius.only(
-                            bottomLeft: Radius.circular(8),
-                            bottomRight: Radius.circular(8),
-                          ),
-                        ),
-                        child: children[index],
-                      );
-                    }
-
-                    // return children[index];
-                    return Container(
-                      clipBehavior: Clip.antiAlias, // and here
-                      decoration: BoxDecoration(
-                        border: Border(top: borderSide, left: borderSide, right: borderSide),
+                if (index == children.length - 1) {
+                  return Container(
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      border: Border.fromBorderSide(borderSide),
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(8),
+                        bottomRight: Radius.circular(8),
                       ),
-                      child: children[index],
-                    );
-                  }),
-                ),
-              ),
+                    ),
+                    child: children[index],
+                  );
+                }
+
+                return Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    border: Border(top: borderSide, left: borderSide, right: borderSide),
+                  ),
+                  child: children[index],
+                );
+              }),
             ),
-          ],
-        );
-      },
+          ),
+        ),
+      ],
     );
   }
 
@@ -379,15 +376,27 @@ class MainScreenState extends State<MainScreen> {
         var s = Site(
           name: siteConfig['name']!,
           id: uuid.v4(),
-          staticHostmap: {
-            "10.1.0.1": StaticHost(
-              lighthouse: true,
-              destinations: [IPAndPort('10.1.1.53', 4242), IPAndPort('1::1', 4242)],
-            ),
+          rawConfig: {
+            'pki': {'ca': siteConfig['ca'], 'cert': siteConfig['cert']},
+            'static_host_map': {
+              '10.1.0.1': ['10.1.1.53:4242', '[1::1]:4242'],
+            },
+            'lighthouse': {
+              'hosts': ['10.1.0.1'],
+              'interval': 60,
+            },
+            'listen': {'host': '[::]', 'port': 4242},
+            'tun': {
+              'mtu': 1300,
+              'unsafe_routes': [
+                {'route': '10.3.3.3/32', 'via': '10.1.0.1'},
+              ],
+            },
+            'cipher': 'aes',
+            'logging': {'level': 'info'},
           },
           ca: [CertificateInfo.debug(rawCert: siteConfig['ca'])],
           certInfo: CertificateInfo.debug(rawCert: siteConfig['cert']),
-          unsafeRoutes: [UnsafeRoute(route: '10.3.3.3/32', via: '10.1.0.1')],
         );
 
         s.key = siteConfig['key'];

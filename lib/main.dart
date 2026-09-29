@@ -1,12 +1,12 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/cupertino.dart' show CupertinoThemeData, DefaultCupertinoLocalizations;
-import 'package:flutter/material.dart'
-    show DefaultMaterialLocalizations, MaterialBasedCupertinoThemeData, TextTheme, ThemeMode;
+import 'package:flutter/cupertino.dart' show DefaultCupertinoLocalizations;
+import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/widgets.dart';
-import 'package:flutter_platform_widgets/flutter_platform_widgets.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:logging_appenders/logging_appenders.dart';
 import 'package:mobile_nebula/screens/enrollment_screen.dart';
 import 'package:mobile_nebula/screens/main_screen.dart';
 import 'package:mobile_nebula/services/settings.dart';
@@ -16,7 +16,17 @@ import 'package:mobile_nebula/services/utils.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
+  // Settings reads config.json over a platform channel, so the binding has to
+  // be up before we touch it
+  WidgetsFlutterBinding.ensureInitialized();
+
+  PrintAppender.setupLogging();
+
   usePathUrlStrategy();
+  var settings = Settings();
+  // Wait for the stored config, otherwise trackErrors reads its default and we
+  // start Sentry against the user's wishes
+  await settings.ready;
   runApp(Main());
 }
 
@@ -42,17 +52,22 @@ class AppState extends State<App> {
   Brightness brightness = SchedulerBinding.instance.platformDispatcher.platformBrightness;
   StreamController dnEnrolled = StreamController.broadcast();
 
+  void _updateBrightness() {
+    if (settings.useSystemColors) {
+      brightness = SchedulerBinding.instance.platformDispatcher.platformBrightness;
+    } else {
+      brightness = settings.darkMode ? Brightness.dark : Brightness.light;
+    }
+  }
+
   @override
   void initState() {
-    //TODO: wait until settings is ready?
+    // main awaits Settings.ready before runApp, so the stored values are already here and the
+    // load's change event has already fired. Apply them directly rather than waiting on a stream.
+    _updateBrightness();
+
     settings.onChange().listen((_) {
-      setState(() {
-        if (settings.useSystemColors) {
-          brightness = SchedulerBinding.instance.platformDispatcher.platformBrightness;
-        } else {
-          brightness = settings.darkMode ? Brightness.dark : Brightness.light;
-        }
-      });
+      setState(_updateBrightness);
     });
 
     // Listen to changes to the system brightness mode, update accordingly
@@ -76,52 +91,44 @@ class AppState extends State<App> {
 
   @override
   Widget build(BuildContext context) {
-    TextTheme textTheme = Utils.createTextTheme(context, "Inter", "Inter");
+    TextTheme textTheme = Utils.createTextTheme();
     MaterialTheme theme = MaterialTheme(textTheme);
 
-    return PlatformProvider(
-      settings: PlatformSettingsData(iosUsesMaterialWidgets: true),
-      builder: (context) => PlatformTheme(
-        themeMode: brightness == Brightness.light ? ThemeMode.light : ThemeMode.dark,
-        materialLightTheme: theme.light(),
-        materialDarkTheme: theme.dark(),
-        cupertinoLightTheme: MaterialBasedCupertinoThemeData(materialTheme: theme.light()),
-        cupertinoDarkTheme: MaterialBasedCupertinoThemeData(materialTheme: theme.dark()),
-        builder: (context) => PlatformApp(
-          navigatorKey: navigatorKey,
-          debugShowCheckedModeBanner: false,
-          localizationsDelegates: <LocalizationsDelegate<dynamic>>[
-            DefaultMaterialLocalizations.delegate,
-            DefaultWidgetsLocalizations.delegate,
-            DefaultCupertinoLocalizations.delegate,
-          ],
-          title: 'Nebula',
-          material: (_, _) {
-            return MaterialAppData(
-              themeMode: brightness == Brightness.light ? ThemeMode.light : ThemeMode.dark,
-              theme: brightness == Brightness.light ? theme.light() : theme.dark(),
-            );
-          },
-          cupertino: (_, _) => CupertinoAppData(theme: CupertinoThemeData(brightness: brightness)),
-          onGenerateRoute: (settings) {
-            if (settings.name == '/') {
-              return platformPageRoute(context: context, builder: (context) => MainScreen(dnEnrolled));
-            }
-
-            final uri = Uri.parse(settings.name!);
-            if (uri.path == EnrollmentScreen.routeName) {
-              // TODO: maybe implement this as a dialog instead of a page, you can stack multiple enrollment screens which is annoying in dev
-              return platformPageRoute(
-                context: context,
-                builder: (context) =>
-                    EnrollmentScreen(code: EnrollmentScreen.parseCode(settings.name!), stream: dnEnrolled),
-              );
-            }
-
-            return null;
-          },
-        ),
+    return MaterialApp(
+      navigatorKey: navigatorKey,
+      scrollBehavior: const MaterialScrollBehavior().copyWith(physics: const ClampingScrollPhysics()),
+      debugShowCheckedModeBanner: false,
+      localizationsDelegates: <LocalizationsDelegate<dynamic>>[
+        DefaultMaterialLocalizations.delegate,
+        DefaultWidgetsLocalizations.delegate,
+        DefaultCupertinoLocalizations.delegate,
+      ],
+      title: 'Nebula',
+      themeMode: brightness == Brightness.light ? ThemeMode.light : ThemeMode.dark,
+      theme: theme.light().copyWith(
+        splashFactory: Platform.isIOS ? NoSplash.splashFactory : null,
+        highlightColor: Platform.isIOS ? Colors.black.withValues(alpha: 0.2) : null,
       ),
+      darkTheme: theme.dark().copyWith(
+        splashFactory: Platform.isIOS ? NoSplash.splashFactory : null,
+        highlightColor: Platform.isIOS ? Colors.white.withValues(alpha: 0.2) : null,
+      ),
+      onGenerateRoute: (settings) {
+        if (settings.name == '/') {
+          return MaterialPageRoute(builder: (context) => MainScreen(dnEnrolled));
+        }
+
+        final uri = Uri.parse(settings.name!);
+        if (uri.path == EnrollmentScreen.routeName) {
+          // TODO: maybe implement this as a dialog instead of a page, you can stack multiple enrollment screens which is annoying in dev
+          return MaterialPageRoute(
+            builder: (context) =>
+                EnrollmentScreen(code: EnrollmentScreen.parseCode(settings.name!), stream: dnEnrolled),
+          );
+        }
+
+        return null;
+      },
     );
   }
 }

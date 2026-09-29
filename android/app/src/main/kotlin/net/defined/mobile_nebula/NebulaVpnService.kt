@@ -36,6 +36,12 @@ class NebulaVpnService : VpnService() {
         const val MSG_SET_REMOTE_FOR_TUNNEL = 7
         const val MSG_CLOSE_TUNNEL = 8
         const val MSG_EXIT = 9
+
+        val ALWAYS_EXCLUDED_APPS = listOf(
+            "com.google.android.projection.gearhead",  // Android Auto
+            "com.google.android.apps.chromecast.app",  // Chromecast
+            "com.google.android.apps.messaging",       // RCS / Jibe
+        )
     }
 
     /**
@@ -173,23 +179,47 @@ class NebulaVpnService : VpnService() {
             builder.setMetered(false)
         }
 
-        // Disallow some common, known-problematic apps
-        // TODO Make this user configurable
-        // Ensure that a misconfigured unsafe_route doesn't block access to the DN API
+        // Always exclude ourselves to prevent routing loops
         disallowApp(builder, "net.defined.mobile_nebula")
         disallowApp(builder, "net.defined.mobile_nebula.debug")
-        // Android Auto Wireless (https://github.com/DefinedNet/mobile_nebula/issues/102)
-        disallowApp(builder, "com.google.android.projection.gearhead")
-        // Chromecast (https://github.com/DefinedNet/mobile_nebula/issues/102)
-        disallowApp(builder, "com.google.android.apps.chromecast.app")
-        // RCS / Jibe
-        disallowApp(builder, "com.google.android.apps.messaging")
 
+        // Default exclusions for known-problematic apps
+        // Users can add more via the Excluded Apps setting
+        ALWAYS_EXCLUDED_APPS.forEach { disallowApp(builder, it) }
+
+        // User-configured excluded apps
+        site!!.excludedApps.forEach { packageName ->
+            disallowApp(builder, packageName)
+        }
+
+        // A managed config can push a malformed resolver or search domain, which
+        // VpnService.Builder rejects by throwing. Skip the bad entry instead of
+        // unwinding out of startVpn, which would leave the UI on "connecting"
+        // forever with no exit announced.
         var hasDnsResolvers = false
         site!!.dnsResolvers.forEach {
-            hasDnsResolvers = true
-            builder.addDnsServer(it)
-            Log.i(TAG, "Adding dns resolver: $it")
+            try {
+                builder.addDnsServer(it)
+                hasDnsResolvers = true
+                Log.i(TAG, "Adding dns resolver: $it")
+            } catch (err: Exception) {
+                Log.w(TAG, "Skipping invalid dns resolver $it: ${err.message}")
+            }
+        }
+
+        site!!.searchDomains.forEach {
+            try {
+                builder.addSearchDomain(it)
+                Log.i(TAG, "Adding dns search domain: $it")
+            } catch (err: Exception) {
+                Log.w(TAG, "Skipping invalid dns search domain $it: ${err.message}")
+            }
+        }
+
+        if (site!!.matchDomains.isNotEmpty()) {
+            // VpnService cannot split DNS by domain, so the resolvers above
+            // receive queries for all domains, not just the match list.
+            Log.w(TAG, "Match domains are unsupported on Android; dns resolvers will serve all domains")
         }
 
         if (isChromeOs() && !hasDnsResolvers) {
@@ -206,11 +236,17 @@ class NebulaVpnService : VpnService() {
         try {
             vpnInterface = builder.establish()
             nebula = mobileNebula.MobileNebula.newNebula(site!!.config, site!!.getKey(this), site!!.logFile, vpnInterface!!.detachFd().toLong())
+            nebula!!.start(exitCallbackFor(nebula!!))
 
         } catch (e: Exception) {
             Log.e(TAG, "Got an error $e")
+            // Go owns the detached tun fd from the moment newNebula is called and closes
+            // it on failure, never close it here, a second close can hit an unrelated
+            // recycled fd. The network callback and reload receiver below were never
+            // registered, so there is nothing else for stopVpn to clean up.
+            nebula = null
             vpnInterface?.close()
-            announceExit(site!!.id, e.message)
+            announceExit(site!!.id, e.message ?: e.toString())
             return stopSelf()
         }
 
@@ -219,7 +255,6 @@ class NebulaVpnService : VpnService() {
         //TODO: There is an open discussion around sleep killing tunnels or just changing mobile to tear down stale tunnels
         //registerSleep()
 
-        nebula!!.start()
         running = true
         sendSimple(MSG_IS_RUNNING, 1)
     }
@@ -249,14 +284,17 @@ class NebulaVpnService : VpnService() {
     }
 
     inner class NetworkCallback : ConnectivityManager.NetworkCallback () {
+        // These arrive on a ConnectivityManager thread and can race the main
+        // thread nulling nebula during a stop, especially a fatal exit caused
+        // by the same network event, so no !! here
         override fun onAvailable(network: Network) {
             super.onAvailable(network)
-            nebula!!.rebind("network change")
+            nebula?.rebind("network change")
         }
 
         override fun onLost(network: Network) {
             super.onLost(network)
-            nebula!!.rebind("network change")
+            nebula?.rebind("network change")
         }
     }
 
@@ -294,29 +332,46 @@ class NebulaVpnService : VpnService() {
         nebula?.reload(site!!.config, site!!.getKey(this))
     }
 
-    private fun stopVpn() {
+    private fun stopVpn(error: String? = null) {
         if (nebula == null) {
             return stopSelf()
         }
 
         unregisterNetworkCallback()
         unregisterReloadReceiver()
+        // stop() blocks until the packet readers have drained and nebula has fully stopped
         nebula?.stop()
         nebula = null
         running = false
-        announceExit(site?.id, null)
+        announceExit(site?.id, error)
         stopSelf()
+    }
+
+    // Called from a Go thread when nebula dies on its own, e.g. a fatal packet
+    // reader error, so the tunnel comes down instead of blackholing traffic.
+    // Bound to its session's nebula instance, a stale callback posted from a
+    // dying session must not tear down a new session on this same service.
+    private fun exitCallbackFor(sessionNebula: mobileNebula.Nebula): mobileNebula.ExitCallback {
+        return object : mobileNebula.ExitCallback {
+            override fun onExit(message: String?) {
+                Handler(Looper.getMainLooper()).post {
+                    // Identity check alone determines session liveness, stopVpn
+                    // nulls nebula on this same thread before a new session starts
+                    if (nebula === sessionNebula) {
+                        stopVpn(message ?: "Nebula exited unexpectedly")
+                    }
+                }
+            }
+        }
     }
 
     override fun onRevoke()  {
         stopVpn()
-        //TODO: wait for the thread to exit
         super.onRevoke()
     }
 
     override fun onDestroy() {
         stopVpn()
-        //TODO: wait for the thread to exit
         super.onDestroy()
     }
 

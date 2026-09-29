@@ -13,51 +13,32 @@
 # Uncomment the line if you want fastlane to automatically update itself
 # update_fastlane
 
+APP_BUNDLE = "net.defined.mobileNebula"
+EXT_BUNDLE = "net.defined.mobileNebula.NebulaNetworkExtension"
+
 default_platform(:ios)
 
 platform :ios do
-  desc "Push a new beta build to TestFlight"
-
-  before_all do
-    xcode_select("/Applications/Xcode_26.0.1.app")
-  end
-
-
+  desc "Archive and sign the App Store ipa"
   lane :build do
-    # Do some things like setting up a temporary keystore to host secrets in CI
-    setup_ci
+    # Manual signing: automatic wants a cloud managed profile, which Apple refuses
+    # here. Runbook is docs/apple-signing.md in the ansible repo.
+    #
+    # No setup_ci: its keychain competes with the one already imported into.
+    app_profile = "apple-signing #{APP_BUNDLE}"
+    ext_profile = "apple-signing #{EXT_BUNDLE}"
 
-#     # Authenticate with Apple app store connect
-#     app_store_connect_api_key
-
-    # Change signing behavior to work in CI
-    update_code_signing_settings(
-      # Automatic signing seems to be a good thing to have on in dev but will not work in CI
-      use_automatic_signing: false,
-      # The default value for this is iOS Development which is not appropriate for release
-      code_sign_identity: "Apple Distribution",
-    )
-
-    # Find our signing certs and profiles, these come from a private repository and managed by `fastlane match`
-    match(type: 'appstore', app_identifier: ["net.defined.mobileNebula","net.defined.mobileNebula.NebulaNetworkExtension"], readonly: true)
-
-    # Update our main program to have the correct provisioning profile from Apple
-    update_project_provisioning(
-      xcodeproj: "Runner.xcodeproj",
-      target_filter: "Runner",
-      # This comes from match() above
-      profile:ENV["sigh_net.defined.mobileNebula_appstore_profile-path"],
-      build_configuration: "Release"
-    )
-
-    # Update our network extension to have the correct provisioning profile from Apple
-    update_project_provisioning(
-      xcodeproj: "Runner.xcodeproj",
-      target_filter: "NebulaNetworkExtension",
-      # This comes from match() above
-      profile:ENV["sigh_net.defined.mobileNebula.NebulaNetworkExtension_appstore_profile-path"],
-      build_configuration: "Release"
-    )
+    [["Runner", app_profile], ["NebulaNetworkExtension", ext_profile]].each do |target, profile|
+      update_code_signing_settings(
+        path: "Runner.xcodeproj",
+        use_automatic_signing: false,
+        team_id: "576H3XS7FP",
+        code_sign_identity: "Apple Distribution",
+        build_configurations: ["Release"],
+        targets: [target],
+        profile_name: profile
+      )
+    end
 
     increment_build_number(
         xcodeproj: "Runner.xcodeproj",
@@ -69,19 +50,26 @@ platform :ios do
         version_number: ENV['BUILD_NAME']
     )
 
+    # No -allowProvisioningUpdates: it is what sends the export to cloud signing.
     build_app(
       output_name: "MobileNebula.ipa",
       workspace: "Runner.xcworkspace",
       scheme: "Runner",
       export_method: "app-store",
+      export_options: {
+        signingStyle: "manual",
+        provisioningProfiles: {
+          APP_BUNDLE => app_profile,
+          EXT_BUNDLE => ext_profile,
+        },
+      },
     )
   end
 
+  desc "Push a new beta build to TestFlight"
   lane :release do
-    # Do some things like setting up a temporary keystore to host secrets in CI
-    setup_ci
-
-    # Authenticate with Apple app store connect
+    # Reads APP_STORE_CONNECT_API_KEY_KEY_ID, _ISSUER_ID and _KEY_FILEPATH, which
+    # the workflow writes out of apple-signing/asc-api-key.
     app_store_connect_api_key
 
     upload_to_testflight(skip_waiting_for_build_processing: true)

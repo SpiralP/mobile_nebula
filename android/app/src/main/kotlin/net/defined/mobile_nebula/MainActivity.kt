@@ -12,12 +12,16 @@ import android.os.*
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.work.*
 import com.google.gson.Gson
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -62,13 +66,16 @@ class MainActivity: FlutterActivity() {
         appContext = context
         //TODO: Initializing in the constructor leads to a context lacking info we need, figure out the right way to do this
         sites = Sites(flutterEngine)
-        
+
         ui = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         ui!!.setMethodCallHandler { call, result ->
             when(call.method) {
                 "android.registerActiveSite" -> registerActiveSite(result)
                 "android.deviceHasCamera" -> deviceHasCamera(result)
                 "android.openVpnSettings" -> openVpnSettings(result)
+                "android.getInstalledApps" -> getInstalledApps(result)
+                "android.getAppIcons" -> getAppIcons(call, result)
+                "android.getAlwaysExcludedApps" -> getAlwaysExcludedApps(result)
 
                 "nebula.parseCerts" -> nebulaParseCerts(call, result)
                 "nebula.generateKeyPair" -> nebulaGenerateKeyPair(result)
@@ -143,6 +150,78 @@ class MainActivity: FlutterActivity() {
         val intent = Intent(Settings.ACTION_VPN_SETTINGS)
         startActivity(intent)
         result.success(null)
+	}
+
+    private fun getAlwaysExcludedApps(result: MethodChannel.Result) {
+        result.success(Gson().toJson(NebulaVpnService.ALWAYS_EXCLUDED_APPS))
+    }
+
+    private fun getInstalledApps(result: MethodChannel.Result) {
+        val pm = context.packageManager
+        lifecycleScope.launch {
+            val json = withContext(Dispatchers.IO) {
+                // Filter to apps with INTERNET permission — the only ones relevant for VPN split tunneling.
+                // This produces a much smaller list than getInstalledApplications() which includes all system
+                // services and libraries.
+                val packages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    pm.getPackagesHoldingPermissions(arrayOf(android.Manifest.permission.INTERNET), PackageManager.PackageInfoFlags.of(0))
+                } else {
+                    @Suppress("DEPRECATION")
+                    pm.getPackagesHoldingPermissions(arrayOf(android.Manifest.permission.INTERNET), 0)
+                }
+
+                val apps = packages.mapNotNull { packageInfo ->
+                    try {
+                        val appInfo = packageInfo.applicationInfo ?: return@mapNotNull null
+                        val appName = pm.getApplicationLabel(appInfo).toString()
+                        mapOf(
+                            "packageName" to packageInfo.packageName,
+                            "appName" to appName
+                        )
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+
+                Gson().toJson(apps)
+            }
+            try {
+                result.success(json)
+            } catch(_: Exception) {}
+        }
+    }
+
+    private fun getAppIcons(call: MethodCall, result: MethodChannel.Result) {
+        val packageNamesJson = call.arguments as? String
+            ?: return result.error("invalid_argument", "packageNames JSON string required", null)
+        val packageNames = Gson().fromJson(packageNamesJson, Array<String>::class.java).toList()
+        val pm = context.packageManager
+
+        lifecycleScope.launch {
+            val json = withContext(Dispatchers.IO) {
+                val icons = mutableMapOf<String, String?>()
+                for (packageName in packageNames) {
+                    try {
+                        val iconDrawable = pm.getApplicationIcon(packageName)
+                        val bitmap = android.graphics.Bitmap.createBitmap(128, 128, android.graphics.Bitmap.Config.ARGB_8888)
+                        val canvas = android.graphics.Canvas(bitmap)
+                        iconDrawable.setBounds(0, 0, 128, 128)
+                        iconDrawable.draw(canvas)
+                        val stream = java.io.ByteArrayOutputStream()
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
+                        icons[packageName] = android.util.Base64.encodeToString(stream.toByteArray(), android.util.Base64.NO_WRAP)
+                        bitmap.recycle()
+                    } catch (_: Exception) {
+                        icons[packageName] = null
+                    }
+                }
+
+                Gson().toJson(icons)
+            }
+            try {
+                result.success(json)
+            } catch(_: Exception) {}
+        }
     }
 
     private fun nebulaParseCerts(call: MethodCall, result: MethodChannel.Result) {
@@ -195,11 +274,11 @@ class MainActivity: FlutterActivity() {
             return result.error("required_argument", "code is a required argument", null)
         }
 
-        val site: IncomingSite
         val siteDir: File
         try {
-            site = apiClient!!.enroll(code)
-            siteDir = site.save(context)
+            val json = apiClient!!.enroll(code)
+            // TODO: pass existingSite so client-only fields (sortKey, excludedApps, dnsOverride) survive re-enrollment
+            siteDir = saveSite(context, json)
         } catch (err: Exception) {
             return result.error("unhandled_error", err.message, null)
         }
@@ -229,12 +308,10 @@ class MainActivity: FlutterActivity() {
     }
 
     private fun saveSite(call: MethodCall, result: MethodChannel.Result) {
-        val site: IncomingSite
+        val json = call.arguments as String
         val siteDir: File
         try {
-            val gson = Gson()
-            site = gson.fromJson(call.arguments as String, IncomingSite::class.java)
-            siteDir = site.save(context)
+            siteDir = saveSite(context, json)
         } catch (err: Exception) {
             //TODO: is toString the best or .message?
             return result.error("failure", err.toString(), null)
@@ -244,11 +321,17 @@ class MainActivity: FlutterActivity() {
             return result.error("failure", "Site config was incomplete, please review and try again", null)
         }
 
-        if (site.alwaysOn == true) {
-            if (activeSiteId != null && activeSiteId != site.id) {
-                stopSite { sites?.getSite(site.id)?.let { startSiteDirectly(it) } }
-            } else if (activeSiteId != site.id) {
-                sites?.getSite(site.id)?.let { startSiteDirectly(it) }
+        // Check if we need to start/restart for always-on
+        val gson = Gson()
+        val map: Map<String, Any?> = gson.fromJson(json, object : com.google.gson.reflect.TypeToken<Map<String, Any?>>() {}.type)
+        val alwaysOn = map["alwaysOn"] as? Boolean ?: false
+        val id = map["id"] as? String
+
+        if (alwaysOn && id != null) {
+            if (activeSiteId != null && activeSiteId != id) {
+                stopSite { sites?.getSite(id)?.let { startSiteDirectly(it) } }
+            } else if (activeSiteId != id) {
+                sites?.getSite(id)?.let { startSiteDirectly(it) }
             }
         }
 

@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_nebula/components/special_text_field.dart';
 import 'package:mobile_nebula/models/cidr.dart';
@@ -18,6 +18,7 @@ class CIDRField extends StatefulWidget {
     this.textInputAction,
     this.ipController,
     this.bitsController,
+    this.enabled = true,
   });
 
   final String ipHelp;
@@ -28,6 +29,7 @@ class CIDRField extends StatefulWidget {
   final TextInputAction? textInputAction;
   final TextEditingController? ipController;
   final TextEditingController? bitsController;
+  final bool enabled;
 
   @override
   CIDRFieldState createState() => CIDRFieldState();
@@ -51,7 +53,7 @@ class CIDRFieldState extends State<CIDRField> {
 
   @override
   Widget build(BuildContext context) {
-    var textStyle = CupertinoTheme.of(context).textTheme.textStyle;
+    var textStyle = Theme.of(context).textTheme.labelLarge!;
 
     return Row(
       children: <Widget>[
@@ -66,6 +68,7 @@ class CIDRFieldState extends State<CIDRField> {
               textAlign: TextAlign.end,
               focusNode: widget.focusNode,
               nextFocusNode: bitsFocus,
+              enabled: widget.enabled,
               onChanged: (val) {
                 if (widget.onChanged == null) {
                   return;
@@ -87,6 +90,7 @@ class CIDRFieldState extends State<CIDRField> {
             focusNode: bitsFocus,
             nextFocusNode: widget.nextFocusNode,
             controller: widget.bitsController,
+            enabled: widget.enabled,
             onChanged: (val) {
               if (widget.onChanged == null) {
                 return;

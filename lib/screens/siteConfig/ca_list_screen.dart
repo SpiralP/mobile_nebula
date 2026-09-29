@@ -1,14 +1,14 @@
 import 'dart:convert';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_platform_widgets/flutter_platform_widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:mobile_nebula/components/config/config_button_item.dart';
 import 'package:mobile_nebula/components/config/config_page_item.dart';
 import 'package:mobile_nebula/components/config/config_section.dart';
 import 'package:mobile_nebula/components/config/config_text_item.dart';
 import 'package:mobile_nebula/components/form_page.dart';
+import 'package:mobile_nebula/components/pill_segmented_button.dart';
 import 'package:mobile_nebula/models/certificate.dart';
 import 'package:mobile_nebula/screens/siteConfig/certificate_details_screen.dart';
 import 'package:mobile_nebula/screens/siteConfig/scan_qr_screen.dart';
@@ -139,26 +139,23 @@ class CAListScreenState extends State<CAListScreen> {
   }
 
   List<Widget> _addCA() {
-    Map<String, Widget> children = {'paste': Text('Copy/Paste'), 'file': Text('File')};
-
-    // not all devices have a camera for QR codes
-    if (widget.supportsQRScanning) {
-      children['qr'] = Text('QR Code');
-    }
+    final segments = <({String value, Widget label})>[
+      (value: 'paste', label: Text('Copy/Paste')),
+      (value: 'file', label: Text('File')),
+      if (widget.supportsQRScanning) (value: 'qr', label: Text('QR Code')),
+    ];
 
     List<Widget> items = [
       Padding(
         padding: EdgeInsets.fromLTRB(10, 25, 10, 0),
-        child: CupertinoSlidingSegmentedControl(
-          groupValue: inputType,
-          onValueChanged: (v) {
-            if (v != null) {
-              setState(() {
-                inputType = v;
-              });
-            }
+        child: PillSegmentedButton<String>(
+          selected: {inputType},
+          onSelectionChanged: (v) {
+            setState(() {
+              inputType = v.first;
+            });
           },
-          children: children,
+          segments: segments,
         ),
       ),
     ];
@@ -236,10 +233,7 @@ class CAListScreenState extends State<CAListScreen> {
           ConfigButtonItem(
             content: Text('Scan a QR code'),
             onPressed: () async {
-              var result = await Navigator.push(
-                context,
-                platformPageRoute(context: context, builder: (context) => ScanQRScreen()),
-              );
+              var result = await Navigator.push(context, MaterialPageRoute(builder: (context) => ScanQRScreen()));
               if (result != null) {
                 _addCAEntry(result, (err) {
                   if (err != null) {

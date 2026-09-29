@@ -1,6 +1,3 @@
-import 'dart:io';
-
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_nebula/components/special_button.dart';
 import 'package:mobile_nebula/services/utils.dart';
@@ -29,24 +26,8 @@ class ConfigPageItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    dynamic theme;
+    final textStyle = Theme.of(context).textTheme.titleMedium!;
 
-    if (Platform.isAndroid) {
-      final origTheme = Theme.of(context);
-      theme = origTheme.copyWith(
-        textTheme: origTheme.textTheme.copyWith(
-          labelLarge: origTheme.textTheme.labelLarge!.copyWith(fontWeight: FontWeight.normal),
-        ),
-      );
-      return Theme(data: theme, child: _buildContent(context));
-    } else {
-      final origTheme = CupertinoTheme.of(context);
-      theme = origTheme.copyWith(primaryColor: CupertinoColors.label.resolveFrom(context));
-      return CupertinoTheme(data: theme, child: _buildContent(context));
-    }
-  }
-
-  Widget _buildContent(BuildContext context) {
     return SpecialButton(
       onPressed: disabled ? null : onPressed,
       color: Theme.of(context).colorScheme.primaryContainer,
@@ -56,13 +37,18 @@ class ConfigPageItem extends StatelessWidget {
         child: Row(
           crossAxisAlignment: crossAxisAlignment,
           children: <Widget>[
-            label != null ? SizedBox(width: labelWidth, child: label) : Container(),
+            content != null && label != null
+                ? SizedBox(
+                    width: labelWidth,
+                    child: DefaultTextStyle(style: textStyle, child: label!),
+                  )
+                : Container(),
             Expanded(
-              child: Container(padding: EdgeInsets.only(right: 10), child: content),
+              child: content != null
+                  ? Container(padding: EdgeInsets.only(right: 10), child: content)
+                  : DefaultTextStyle(style: textStyle, child: label ?? Container()),
             ),
-            disabled
-                ? Container()
-                : Icon(Icons.arrow_forward_ios, color: CupertinoColors.placeholderText.resolveFrom(context), size: 18),
+            disabled ? Container() : Icon(Icons.arrow_forward_ios, color: textStyle.color, size: 18),
           ],
         ),
       ),

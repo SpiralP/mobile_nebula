@@ -13,7 +13,7 @@ func MissingArgumentError(message: String, details: Any?) -> FlutterError {
 }
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private let dnUpdater = DNUpdater()
   private let apiClient = APIClient()
   private var sites: Sites?
@@ -23,27 +23,16 @@ func MissingArgumentError(message: String, details: Any?) -> FlutterError {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
 
-    dnUpdater.updateAllLoop { site in
-      // Signal the site has changed in case the current site details screen is active
-      let container = self.sites?.getContainer(id: site.id)
-      if container != nil {
-        // Update references to the site with the new site config
-        container!.site = site
-        container!.updater.update(connected: site.connected ?? false, replaceSite: site)
-      }
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
 
-      // Signal to the main screen to reload
-      self.ui?.invokeMethod("refreshSites", arguments: nil)
-    }
+    let messenger = engineBridge.applicationRegistrar.messenger()
 
-    guard let controller = window?.rootViewController as? FlutterViewController else {
-      fatalError("rootViewController is not type FlutterViewController")
-    }
-
-    sites = Sites(messenger: controller.binaryMessenger)
-    ui = FlutterMethodChannel(name: ChannelName.vpn, binaryMessenger: controller.binaryMessenger)
+    sites = Sites(messenger: messenger)
+    ui = FlutterMethodChannel(name: ChannelName.vpn, binaryMessenger: messenger)
 
     ui!.setMethodCallHandler({ (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
       switch call.method {
@@ -56,7 +45,7 @@ func MissingArgumentError(message: String, details: Any?) -> FlutterError {
 
       case "listSites": return self.listSites(result: result)
       case "deleteSite": return self.deleteSite(call: call, result: result)
-      case "saveSite": return self.saveSite(call: call, result: result)
+      case "saveSite": return self.saveSiteFromCall(call: call, result: result)
       case "startSite": return self.startSite(call: call, result: result)
       case "stopSite": return self.stopSite(call: call, result: result)
 
@@ -78,7 +67,18 @@ func MissingArgumentError(message: String, details: Any?) -> FlutterError {
       }
     })
 
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    dnUpdater.updateAllLoop { site in
+      // Signal the site has changed in case the current site details screen is active
+      let container = self.sites?.getContainer(id: site.id)
+      if container != nil {
+        // Update references to the site with the new site config
+        container!.site = site
+        container!.updater.update(connected: site.connected ?? false, replaceSite: site)
+      }
+
+      // Signal to the main screen to reload
+      self.ui?.invokeMethod("refreshSites", arguments: nil)
+    }
   }
 
   func nebulaParseCerts(call: FlutterMethodCall, result: FlutterResult) {
@@ -150,10 +150,20 @@ func MissingArgumentError(message: String, details: Any?) -> FlutterError {
     guard let code = call.arguments as? String else { return result(NoArgumentsError()) }
 
     do {
-      let site = try apiClient.enroll(code: code)
+      let json = try apiClient.enroll(code: code)
 
-      let oldSite = self.sites?.getSite(id: site.id)
-      site.save(manager: oldSite?.manager) { error in
+      // Parse to get the site ID for finding existing manager
+      guard let data = json.data(using: .utf8),
+        let obj = try? JSONSerialization.jsonObject(with: data),
+        let map = obj as? [String: Any],
+        let id = map["id"] as? String
+      else {
+        return result(CallFailedError(message: "Failed to parse enrollment response"))
+      }
+
+      let oldSite = self.sites?.getSite(id: id)
+      // TODO: pass existingSite so client-only fields (sortKey, dnsOverride) survive re-enrollment
+      saveSite(jsonString: json, manager: oldSite?.manager) { error in
         if error != nil {
           return result(
             CallFailedError(message: "Failed to enroll", details: error!.localizedDescription))
@@ -194,16 +204,20 @@ func MissingArgumentError(message: String, details: Any?) -> FlutterError {
     }
   }
 
-  func saveSite(call: FlutterMethodCall, result: @escaping FlutterResult) {
+  func saveSiteFromCall(call: FlutterMethodCall, result: @escaping FlutterResult) {
     guard let json = call.arguments as? String else { return result(NoArgumentsError()) }
-    guard let data = json.data(using: .utf8) else { return result(NoArgumentsError()) }
 
-    guard let site = try? JSONDecoder().decode(IncomingSite.self, from: data) else {
+    // Parse to get the site ID for finding existing manager
+    guard let data = json.data(using: .utf8),
+      let obj = try? JSONSerialization.jsonObject(with: data),
+      let map = obj as? [String: Any],
+      let id = map["id"] as? String
+    else {
       return result(NoArgumentsError())
     }
 
-    let oldSite = self.sites?.getSite(id: site.id)
-    site.save(manager: oldSite?.manager) { error in
+    let oldSite = self.sites?.getSite(id: id)
+    saveSite(jsonString: json, manager: oldSite?.manager) { error in
       if error != nil {
         return result(
           CallFailedError(message: "Failed to save site", details: error!.localizedDescription))

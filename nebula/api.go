@@ -66,7 +66,14 @@ func (c *APIClient) Enroll(code string) (*EnrollResult, error) {
 		return nil, fmt.Errorf("unexpected failure: %s", err)
 	}
 
-	site, err := newDNSite(meta.Org.Name, cfg, string(pkey), *creds)
+	// Name the site after the network to match DNClient. Fall back to the org
+	// name in case the API returns an empty network name.
+	name := meta.Network.Name
+	if name == "" {
+		name = meta.Org.Name
+	}
+
+	site, err := newDNSite(name, cfg, string(pkey), *creds)
 	if err != nil {
 		return nil, fmt.Errorf("failure generating site: %s", err)
 	}
@@ -79,7 +86,7 @@ func (c *APIClient) Enroll(code string) (*EnrollResult, error) {
 	return &EnrollResult{Site: string(jsonSite)}, nil
 }
 
-func (c *APIClient) TryUpdate(siteName string, hostID string, privateKey string, counter int, trustedKeys string) (*TryUpdateResult, error) {
+func (c *APIClient) TryUpdate(siteName string, hostID string, privateKey string, counter int, trustedKeys string, nebulaCert string, nebulaKey string) (*TryUpdateResult, error) {
 	// Build dnapi.Credentials struct from inputs
 	if counter < 0 {
 		return nil, fmt.Errorf("invalid counter value: must be unsigned")
@@ -106,7 +113,7 @@ func (c *APIClient) TryUpdate(siteName string, hostID string, privateKey string,
 	}
 
 	// Check for update
-	msg, err := c.c.LongPollWait(context.Background(), creds, []string{message.DoUpdate})
+	msg, err := c.c.LongPollWait(context.Background(), creds, []string{message.DoUpdate, message.DoConfigUpdate})
 	switch {
 	case errors.Is(err, dnapi.ErrInvalidCredentials):
 		return nil, InvalidCredentialsError{}
@@ -121,6 +128,8 @@ func (c *APIClient) TryUpdate(siteName string, hostID string, privateKey string,
 	switch msgType.Command {
 	case message.DoUpdate:
 		return c.doUpdate(siteName, creds)
+	case message.DoConfigUpdate:
+		return c.doConfigUpdate(siteName, creds, nebulaCert, nebulaKey)
 	default:
 		return &TryUpdateResult{FetchedUpdate: false}, nil
 	}
@@ -139,6 +148,36 @@ func (c *APIClient) doUpdate(siteName string, creds keys.Credentials) (*TryUpdat
 	}
 
 	site, err := newDNSite(siteName, cfg, string(pkey), *newCreds)
+	if err != nil {
+		return nil, fmt.Errorf("failure generating site: %s", err)
+	}
+
+	jsonSite, err := json.Marshal(site)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal site: %s", err)
+	}
+
+	return &TryUpdateResult{Site: string(jsonSite), FetchedUpdate: true}, nil
+}
+
+func (c *APIClient) doConfigUpdate(siteName string, creds keys.Credentials, nebulaCert, nebulaKey string) (*TryUpdateResult, error) {
+	updateCtx, updateCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer updateCancel()
+	cfg, newCreds, _, err := c.c.DoConfigUpdate(updateCtx, creds)
+	switch {
+	case errors.Is(err, dnapi.ErrInvalidCredentials):
+		return nil, InvalidCredentialsError{}
+	case err != nil:
+		return nil, fmt.Errorf("DoConfigUpdate error: %s", err)
+	}
+
+	// DoConfigUpdate returns config without the cert, so insert the existing one
+	cfg, err = dnapi.InsertConfigCert(cfg, []byte(nebulaCert))
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert cert into config: %s", err)
+	}
+
+	site, err := newDNSite(siteName, cfg, nebulaKey, *newCreds)
 	if err != nil {
 		return nil, fmt.Errorf("failure generating site: %s", err)
 	}
