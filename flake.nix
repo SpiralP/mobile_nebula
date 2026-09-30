@@ -22,7 +22,7 @@
             # latest https://developer.android.com/tools/releases/build-tools
             buildToolsVersions = [ "35.0.0" ];
             # latest https://developer.android.com/tools/releases/platform-tools
-            platformToolsVersion = "36.0.2";
+            platformToolsVersion = "37.0.1";
             # latest https://developer.android.com/tools/releases/sdk-tools
             toolsVersion = "26.1.1";
             extraLicenses = [
@@ -73,14 +73,8 @@
           # fix starting vpn sometimes failing
           # "bulkBarrierPreWrite: unaligned arguments"
           # https://github.com/golang/go/issues/46893
-          go = pkgs.go.overrideAttrs (old: {
-            patches = old.patches ++ [
-              (pkgs.fetchpatch2 {
-                url = "https://github.com/golang/go/commit/d5b950399de01a0e28eeb48d2c8474db4aad0e8a.patch";
-                hash = "sha256-OyADBdp32vGjajkcyN2Uu6TiFTnuJUwOMcewXrybmso=";
-              })
-            ];
-          });
+          # fixed upstream in go 1.26 (golang/go commit d5b950399de01a0e28eeb48d2c8474db4aad0e8a)
+          go = pkgs.go;
           buildGoModule = pkgs.buildGoModule.override {
             inherit go;
           };
@@ -188,7 +182,7 @@
 
             src = ./nebula;
 
-            vendorHash = "sha256-RN2KXeYneO11+dXvLayKJMQ9jzoUqxsu7niXjCmHOTo=";
+            vendorHash = "sha256-unVP1lHrP6rl6yYSXx3WnPDojbUsgYLgc5d0e28DsuY=";
 
             proxyVendor = true;
             overrideModAttrs = (final: prev: {
@@ -218,7 +212,7 @@
             dontDartInstall = true;
             dontDartInstallCache = true;
 
-            outputHash = "sha256-mWB42iabCmsWFOzvOCTPX4eVOKqR61H8rMvBwz2mQCI=";
+            outputHash = "sha256-dmUdFoP0z0+cQnqNEsqdL2qVI34Phu6Ez73deIHyXyM=";
             outputHashAlgo = "sha256";
             outputHashMode = "flat";
           }).overrideAttrs (prev: {

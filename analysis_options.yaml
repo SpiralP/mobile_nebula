@@ -33,3 +33,6 @@ analyzer:
   exclude:
     # This is a generated file, let's ignore it.
     - lib/services/theme.dart
+    - build/**
+    - android/**
+    - ios/**
