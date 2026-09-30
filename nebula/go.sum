@@ -134,6 +134,8 @@ github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6Mwd
 github.com/sirupsen/logrus v1.6.0/go.mod h1:7uNnSEd1DgxDLC74fIahvMZmmYsHGZGEOFrfsX/uA88=
 github.com/sirupsen/logrus v1.9.4 h1:TsZE7l11zFCLZnZ+teH4Umoq5BhEIfIzfRDZ1Uzql2w=
 github.com/sirupsen/logrus v1.9.4/go.mod h1:ftWc9WdOfJ0a92nsE2jF5u5ZwH8Bv2zdeOC42RjbV2g=
+github.com/slackhq/nebula v1.11.2 h1:eP61cSfUuoEVGViD50gZBsAbBLPUAhoNOYewPmEwPG4=
+github.com/slackhq/nebula v1.11.2/go.mod h1:xz3SEyYeEhXY8MDlVu8S3Qt+SjncsSJ8bl4RXUgxtXQ=
 github.com/spiralp/nebula v1.11.2-custom1 h1:Mo5IS5XZpijOVqGsb8WJOI+EDA6irpguqYcaR8n55ZM=
 github.com/spiralp/nebula v1.11.2-custom1/go.mod h1:LMQ9bvj/e88IKja5hp3CNxgIwX96bwflf6pDIJOYSOc=
 github.com/stefanberger/go-pkcs11uri v0.0.0-20230803200340-78284954bff6 h1:pnnLyeX7o/5aX8qUQ69P/mLojDqwda8hFOCBTmP/6hw=
