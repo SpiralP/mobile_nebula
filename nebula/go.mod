@@ -9,7 +9,7 @@ require (
 	github.com/sirupsen/logrus v1.9.4
 	github.com/slackhq/nebula v1.11.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/mobile v0.0.0-20260730202154-c700fe717e6e
 	golang.org/x/sys v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
