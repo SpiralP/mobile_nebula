@@ -7,7 +7,7 @@ replace github.com/slackhq/nebula v1.11.0 => github.com/spiralp/nebula v1.11.2-c
 require (
 	github.com/DefinedNet/dnapi v0.0.0-20260313005402-c66f625d8dfd
 	github.com/sirupsen/logrus v1.9.4
-	github.com/slackhq/nebula v1.11.0
+	github.com/slackhq/nebula v1.11.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.56.0
 	golang.org/x/mobile v0.0.0-20260730202154-c700fe717e6e
