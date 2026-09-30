@@ -128,12 +128,12 @@ class Utils {
 
   static Future<String?> pickFile(BuildContext context) async {
     await FilePicker.clearTemporaryFiles();
-    final result = await FilePicker.pickFiles(allowMultiple: false);
+    final result = await FilePicker.pickFile();
     if (result == null) {
       return null;
     }
 
-    final file = File(result.files.first.path!);
+    final file = File(result.path!);
     return file.readAsString();
   }
 

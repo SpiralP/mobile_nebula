@@ -521,13 +521,13 @@ packages:
     source: hosted
     version: "4.1.0"
   pana:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: pana
-      sha256: bbad5a3e085fcc2475f08fe1240041e25d74482da80d9af00bc17cce99989e29
+      sha256: "6c3185d54c10cecb656e93842f8c42dc438a9da72876c7a94861607cb05b71f7"
       url: "https://pub.dev"
     source: hosted
-    version: "0.22.24"
+    version: "0.23.4"
   path:
     dependency: "direct main"
     description:
@@ -821,14 +821,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.0"
-  tar:
-    dependency: transitive
-    description:
-      name: tar
-      sha256: b338bacfd24dae6cf527acb4242003a71fc88ce183a9002376fabbc4ebda30c9
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.2"
   term_glyph:
     dependency: transitive
     description:
