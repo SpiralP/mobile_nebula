@@ -36,7 +36,7 @@ func newDNSite(name string, rawCfg []byte, key string, creds keys.Credentials) (
 	}
 
 	// Strip pki.key from rawConfig — key is stored separately
-	if pki, ok := rawConfigJSON["pki"].(map[string]interface{}); ok {
+	if pki, ok := rawConfigJSON["pki"].(map[string]any); ok {
 		delete(pki, "key")
 	}
 
@@ -77,38 +77,38 @@ func newDNSite(name string, rawCfg []byte, key string, creds keys.Credentials) (
 
 // yamlToJSONMap converts a YAML byte slice to a map[string]interface{} suitable for JSON marshaling.
 // It normalizes map[interface{}]interface{} (Go yaml output) to map[string]interface{}.
-func yamlToJSONMap(yamlBytes []byte) (map[string]interface{}, error) {
-	var raw interface{}
+func yamlToJSONMap(yamlBytes []byte) (map[string]any, error) {
+	var raw any
 	if err := yaml.Unmarshal(yamlBytes, &raw); err != nil {
 		return nil, err
 	}
 
 	normalized := normalizeYamlValue(raw)
-	if m, ok := normalized.(map[string]interface{}); ok {
+	if m, ok := normalized.(map[string]any); ok {
 		return m, nil
 	}
-	return map[string]interface{}{}, nil
+	return map[string]any{}, nil
 }
 
 // normalizeYamlValue recursively converts map[interface{}]interface{} to map[string]interface{}
 // so the result can be marshaled to JSON.
-func normalizeYamlValue(v interface{}) interface{} {
+func normalizeYamlValue(v any) any {
 	switch val := v.(type) {
-	case map[interface{}]interface{}:
-		m := make(map[string]interface{}, len(val))
+	case map[any]any:
+		m := make(map[string]any, len(val))
 		for k, v := range val {
 			key, _ := k.(string)
 			m[key] = normalizeYamlValue(v)
 		}
 		return m
-	case map[string]interface{}:
-		m := make(map[string]interface{}, len(val))
+	case map[string]any:
+		m := make(map[string]any, len(val))
 		for k, v := range val {
 			m[k] = normalizeYamlValue(v)
 		}
 		return m
-	case []interface{}:
-		a := make([]interface{}, len(val))
+	case []any:
+		a := make([]any, len(val))
 		for i, v := range val {
 			a[i] = normalizeYamlValue(v)
 		}

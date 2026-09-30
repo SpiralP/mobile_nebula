@@ -49,7 +49,7 @@ type KeyPair struct {
 // RenderConfig takes a new-format site JSON (with rawConfig) and a private key,
 // and returns the full nebula YAML config with the key injected.
 func RenderConfig(configData string, key string) (string, error) {
-	var d map[string]interface{}
+	var d map[string]any
 
 	err := json.Unmarshal([]byte(configData), &d)
 	if err != nil {
@@ -63,15 +63,15 @@ func RenderConfig(configData string, key string) (string, error) {
 	}
 
 	// Parse rawConfig JSON into a map
-	var rawConfig map[string]interface{}
+	var rawConfig map[string]any
 	if err := json.Unmarshal([]byte(rawConfigStr), &rawConfig); err != nil {
 		return "", fmt.Errorf("failed to parse rawConfig: %s", err)
 	}
 
 	// Inject pki.key
-	pki, ok := rawConfig["pki"].(map[string]interface{})
+	pki, ok := rawConfig["pki"].(map[string]any)
 	if !ok {
-		pki = map[string]interface{}{}
+		pki = map[string]any{}
 		rawConfig["pki"] = pki
 	}
 	pki["key"] = key
@@ -86,7 +86,7 @@ func RenderConfig(configData string, key string) (string, error) {
 }
 
 // renderConfigLegacy handles the old decomposed-fields format for backwards compatibility.
-func renderConfigLegacy(d map[string]interface{}, key string) (string, error) {
+func renderConfigLegacy(d map[string]any, key string) (string, error) {
 	cfg := newConfig()
 	cfg.PKI.CA, _ = d["ca"].(string)
 	cfg.PKI.Cert, _ = d["cert"].(string)
@@ -110,16 +110,16 @@ func renderConfigLegacy(d map[string]interface{}, key string) (string, error) {
 	}
 
 	cfg.Lighthouse.Hosts = make([]string, 0)
-	if staticHostmap, ok := d["staticHostmap"].(map[string]interface{}); ok {
+	if staticHostmap, ok := d["staticHostmap"].(map[string]any); ok {
 		for nebIp, mapping := range staticHostmap {
-			def := mapping.(map[string]interface{})
+			def := mapping.(map[string]any)
 
 			isLh, _ := def["lighthouse"].(bool)
 			if isLh {
 				cfg.Lighthouse.Hosts = append(cfg.Lighthouse.Hosts, nebIp)
 			}
 
-			hosts, _ := def["destinations"].([]interface{})
+			hosts, _ := def["destinations"].([]any)
 			realHosts := make([]string, len(hosts))
 
 			for i, h := range hosts {
@@ -130,10 +130,10 @@ func renderConfigLegacy(d map[string]interface{}, key string) (string, error) {
 		}
 	}
 
-	if unsafeRoutes, ok := d["unsafeRoutes"].([]interface{}); ok {
+	if unsafeRoutes, ok := d["unsafeRoutes"].([]any); ok {
 		cfg.Tun.UnsafeRoutes = make([]configUnsafeRoute, len(unsafeRoutes))
 		for i, r := range unsafeRoutes {
-			rawRoute := r.(map[string]interface{})
+			rawRoute := r.(map[string]any)
 			route := &cfg.Tun.UnsafeRoutes[i]
 			route.Route, _ = rawRoute["route"].(string)
 			route.Via, _ = rawRoute["via"].(string)
@@ -157,7 +157,7 @@ func MigrateConfig(oldConfigJSON string, key string) (string, error) {
 	}
 
 	// If it already has a rawConfig from the old managed flow, use that as-is but convert from YAML to JSON
-	var rawConfigJSON map[string]interface{}
+	var rawConfigJSON map[string]any
 	if old.RawConfig != nil && *old.RawConfig != "" {
 		var err error
 		rawConfigJSON, err = yamlToJSONMap([]byte(*old.RawConfig))
@@ -166,7 +166,7 @@ func MigrateConfig(oldConfigJSON string, key string) (string, error) {
 		}
 	} else {
 		// Render legacy config to YAML, then convert to JSON map
-		var d map[string]interface{}
+		var d map[string]any
 		if err := json.Unmarshal([]byte(oldConfigJSON), &d); err != nil {
 			return "", err
 		}
@@ -183,15 +183,15 @@ func MigrateConfig(oldConfigJSON string, key string) (string, error) {
 	}
 
 	// Strip pki.key from rawConfig
-	if pki, ok := rawConfigJSON["pki"].(map[string]interface{}); ok {
+	if pki, ok := rawConfigJSON["pki"].(map[string]any); ok {
 		delete(pki, "key")
 	}
 
 	// Preserve dnsResolvers from legacy config under the mobile_nebula namespace
 	if old.DnsResolvers != nil && len(*old.DnsResolvers) > 0 {
-		mobileNebula, ok := rawConfigJSON["mobile_nebula"].(map[string]interface{})
+		mobileNebula, ok := rawConfigJSON["mobile_nebula"].(map[string]any)
 		if !ok {
-			mobileNebula = map[string]interface{}{}
+			mobileNebula = map[string]any{}
 		}
 		mobileNebula["dns_resolvers"] = *old.DnsResolvers
 		rawConfigJSON["mobile_nebula"] = mobileNebula
@@ -228,7 +228,7 @@ func MigrateConfig(oldConfigJSON string, key string) (string, error) {
 // move out of the rawConfig mobile_nebula namespace into the top-level
 // dnsOverride client field so they survive managed config updates.
 func MigrateConfigV2(siteJSON string) (string, error) {
-	var siteMap map[string]interface{}
+	var siteMap map[string]any
 	if err := json.Unmarshal([]byte(siteJSON), &siteMap); err != nil {
 		return "", fmt.Errorf("failed to parse site JSON: %s", err)
 	}
@@ -237,9 +237,9 @@ func MigrateConfigV2(siteJSON string) (string, error) {
 	// the platform loaders delete a site whose migration errors, while a site
 	// with a bad rawConfig otherwise loads and surfaces a parse error.
 	if rc, ok := siteMap["rawConfig"].(string); ok && rc != "" {
-		var rawConfig map[string]interface{}
+		var rawConfig map[string]any
 		if err := json.Unmarshal([]byte(rc), &rawConfig); err == nil {
-			if mn, ok := rawConfig["mobile_nebula"].(map[string]interface{}); ok {
+			if mn, ok := rawConfig["mobile_nebula"].(map[string]any); ok {
 				resolvers := stringList(mn, "dns_resolvers")
 				matchDomains := stringList(mn, "match_domains")
 				searchDomains := stringList(mn, "search_domains")
@@ -254,7 +254,7 @@ func MigrateConfigV2(siteJSON string) (string, error) {
 				// it as absent so the legacy settings still hoist.
 				hasOverride := siteMap["dnsOverride"] != nil
 				if !hasOverride && (resolvers != nil || matchDomains != nil || searchDomains != nil) {
-					siteMap["dnsOverride"] = map[string]interface{}{
+					siteMap["dnsOverride"] = map[string]any{
 						"enabled":       true,
 						"resolvers":     orEmpty(resolvers),
 						"matchDomains":  orEmpty(matchDomains),
@@ -298,7 +298,7 @@ func DefaultRawConfig() (string, error) {
 	}
 
 	// Strip pki.key
-	if pki, ok := jsonMap["pki"].(map[string]interface{}); ok {
+	if pki, ok := jsonMap["pki"].(map[string]any); ok {
 		delete(pki, "key")
 	}
 

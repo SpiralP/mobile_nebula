@@ -12,31 +12,31 @@ import (
 
 func TestRenderConfig(t *testing.T) {
 	// New-format site JSON with rawConfig
-	rawConfig := map[string]interface{}{
-		"pki": map[string]interface{}{
+	rawConfig := map[string]any{
+		"pki": map[string]any{
 			"ca":   "-----BEGIN NEBULA CERTIFICATE-----\nCpEBCg9EZWZpbmVkIHJvb3QgMDISE4CAhFCA/v//D4CCoIUMgID8/w8aE4CAgFCA\n/v//D4CAoIUMgID8/w8iBHRlc3QiBmxhcHRvcCIFcGhvbmUiCGVtcGxveWVlIgVh\nZG1pbiiI05z1BTCIuqGEBjogV/nxuQ1/kN12IrYs/H1cpZr3agQUnRs9FqWdJcOa\nJSlAARJA4H1wI3hdfVpIy8Y9IZHqIlMIFObCu5ceM4aELiTKsEGv+g7u8Dn1VY8g\nQPNsuOsqJB3ma8PntddPYn5QgH+qDA==\n-----END NEBULA CERTIFICATE-----\n",
 			"cert": "-----BEGIN NEBULA CERTIFICATE-----\nCmcKCmNocm9tZWJvb2sSCYmAhFCA/v//DyiR1Zf2BTCHuqGEBjogqtoJL9WKGKLp\nb3BIgTEZnTTusSJOiswuf1DS7jPjMzFKIIstsyPnnccgEYkNflwrYBvZFMCOtgmN\nuc5Jpc5lbzM9EkBACYP3VMFYHk2h5AcpURcG6QwS4iYOgHET7lMbM7WSMj4ZnzLR\ni2HhX58vSTr6evgvKuSPaA23hLUqR65QNRQD\n-----END NEBULA CERTIFICATE-----\n",
 		},
-		"static_host_map": map[string]interface{}{
-			"10.1.0.1": []interface{}{"10.1.1.53:4242"},
+		"static_host_map": map[string]any{
+			"10.1.0.1": []any{"10.1.1.53:4242"},
 		},
-		"lighthouse": map[string]interface{}{
-			"hosts":    []interface{}{"10.1.0.1"},
+		"lighthouse": map[string]any{
+			"hosts":    []any{"10.1.0.1"},
 			"interval": 7200,
 		},
-		"listen": map[string]interface{}{
+		"listen": map[string]any{
 			"host": "[::]",
 			"port": 4242,
 		},
-		"tun": map[string]interface{}{
+		"tun": map[string]any{
 			"mtu": 1300,
-			"unsafe_routes": []interface{}{
-				map[string]interface{}{"route": "10.3.3.3/32", "via": "10.1.0.1"},
-				map[string]interface{}{"route": "1.1.1.2/32", "via": "10.1.0.1"},
+			"unsafe_routes": []any{
+				map[string]any{"route": "10.3.3.3/32", "via": "10.1.0.1"},
+				map[string]any{"route": "1.1.1.2/32", "via": "10.1.0.1"},
 			},
 		},
 		"cipher": "aes",
-		"logging": map[string]interface{}{
+		"logging": map[string]any{
 			"level": "info",
 		},
 	}
@@ -45,7 +45,7 @@ func TestRenderConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	sortKey := 3
-	siteJSON := map[string]interface{}{
+	siteJSON := map[string]any{
 		"name":          "Debug Test - unsafe",
 		"id":            "be9d6756-4099-4b25-a901-9d3b773e7d1a",
 		"sortKey":       sortKey,
@@ -138,7 +138,7 @@ func TestMigrateConfig(t *testing.T) {
 	newConfig, err := MigrateConfig(oldConfig, "test-key")
 	require.NoError(t, err, "MigrateConfig failed")
 
-	var newSite map[string]interface{}
+	var newSite map[string]any
 	err = json.Unmarshal([]byte(newConfig), &newSite)
 	require.NoError(t, err, "Failed to parse migrated config")
 
@@ -150,7 +150,7 @@ func TestMigrateConfig(t *testing.T) {
 	assert.Equal(t, false, newSite["managed"], "unmanaged site should stay unmanaged after migration")
 
 	// Verify rawConfig contains the expected fields
-	var rawConfig map[string]interface{}
+	var rawConfig map[string]any
 	err = json.Unmarshal([]byte(newSite["rawConfig"].(string)), &rawConfig)
 	require.NoError(t, err, "Failed to parse rawConfig")
 
@@ -178,7 +178,7 @@ func TestMigrateConfig_ManagedSite(t *testing.T) {
 	newConfig, err := MigrateConfig(oldConfig, "test-key")
 	require.NoError(t, err)
 
-	var newSite map[string]interface{}
+	var newSite map[string]any
 	err = json.Unmarshal([]byte(newConfig), &newSite)
 	require.NoError(t, err)
 
@@ -204,7 +204,7 @@ func TestMigrateConfig_ConfigVersion(t *testing.T) {
 	newConfig, err := MigrateConfig(oldConfig, "key")
 	require.NoError(t, err)
 
-	var newSite map[string]interface{}
+	var newSite map[string]any
 	err = json.Unmarshal([]byte(newConfig), &newSite)
 	require.NoError(t, err)
 
@@ -230,7 +230,7 @@ func TestMigrateConfig_KeyStripped(t *testing.T) {
 	newConfig, err := MigrateConfig(oldConfig, "my-secret-key")
 	require.NoError(t, err)
 
-	var newSite map[string]interface{}
+	var newSite map[string]any
 	err = json.Unmarshal([]byte(newConfig), &newSite)
 	require.NoError(t, err)
 
@@ -238,11 +238,11 @@ func TestMigrateConfig_KeyStripped(t *testing.T) {
 	assert.Nil(t, newSite["key"], "key should be nil in migrated config")
 
 	// pki.key should be stripped from rawConfig
-	var rawConfig map[string]interface{}
+	var rawConfig map[string]any
 	err = json.Unmarshal([]byte(newSite["rawConfig"].(string)), &rawConfig)
 	require.NoError(t, err)
 
-	if pki, ok := rawConfig["pki"].(map[string]interface{}); ok {
+	if pki, ok := rawConfig["pki"].(map[string]any); ok {
 		assert.NotContains(t, pki, "key", "pki.key should be stripped from rawConfig")
 	}
 }
@@ -268,21 +268,21 @@ func TestMigrateConfig_DnsResolvers(t *testing.T) {
 	newConfig, err := MigrateConfig(oldConfig, "key")
 	require.NoError(t, err)
 
-	var newSite map[string]interface{}
+	var newSite map[string]any
 	err = json.Unmarshal([]byte(newConfig), &newSite)
 	require.NoError(t, err)
 
-	var rawConfig map[string]interface{}
+	var rawConfig map[string]any
 	err = json.Unmarshal([]byte(newSite["rawConfig"].(string)), &rawConfig)
 	require.NoError(t, err)
 
 	// dnsResolvers should be under mobile_nebula namespace
-	mobileNebula, ok := rawConfig["mobile_nebula"].(map[string]interface{})
+	mobileNebula, ok := rawConfig["mobile_nebula"].(map[string]any)
 	require.True(t, ok, "rawConfig should have mobile_nebula key")
 
-	resolvers, ok := mobileNebula["dns_resolvers"].([]interface{})
+	resolvers, ok := mobileNebula["dns_resolvers"].([]any)
 	require.True(t, ok, "mobile_nebula should have dns_resolvers")
-	assert.Equal(t, []interface{}{"1.1.1.1", "8.8.8.8"}, resolvers)
+	assert.Equal(t, []any{"1.1.1.1", "8.8.8.8"}, resolvers)
 
 	// dnsResolvers should NOT be at the top level of rawConfig
 	assert.NotContains(t, rawConfig, "dnsResolvers", "dnsResolvers should not be at rawConfig top level")
@@ -308,11 +308,11 @@ func TestMigrateConfig_NoDnsResolvers(t *testing.T) {
 	newConfig, err := MigrateConfig(oldConfig, "key")
 	require.NoError(t, err)
 
-	var newSite map[string]interface{}
+	var newSite map[string]any
 	err = json.Unmarshal([]byte(newConfig), &newSite)
 	require.NoError(t, err)
 
-	var rawConfig map[string]interface{}
+	var rawConfig map[string]any
 	err = json.Unmarshal([]byte(newSite["rawConfig"].(string)), &rawConfig)
 	require.NoError(t, err)
 
@@ -341,7 +341,7 @@ func TestMigrateConfig_ManagedWithRawConfig(t *testing.T) {
 	newConfig, err := MigrateConfig(oldConfig, "key")
 	require.NoError(t, err)
 
-	var newSite map[string]interface{}
+	var newSite map[string]any
 	err = json.Unmarshal([]byte(newConfig), &newSite)
 	require.NoError(t, err)
 
@@ -349,14 +349,14 @@ func TestMigrateConfig_ManagedWithRawConfig(t *testing.T) {
 	assert.Equal(t, float64(1), newSite["configVersion"])
 
 	// rawConfig should be JSON (converted from old YAML)
-	var rawConfig map[string]interface{}
+	var rawConfig map[string]any
 	err = json.Unmarshal([]byte(newSite["rawConfig"].(string)), &rawConfig)
 	require.NoError(t, err, "rawConfig should be valid JSON after migration")
 
 	assert.Equal(t, "aes", rawConfig["cipher"])
 
 	// pki.key should be stripped
-	if pki, ok := rawConfig["pki"].(map[string]interface{}); ok {
+	if pki, ok := rawConfig["pki"].(map[string]any); ok {
 		assert.NotContains(t, pki, "key", "pki.key should be stripped from rawConfig")
 	}
 }
@@ -365,14 +365,14 @@ func TestDefaultRawConfig(t *testing.T) {
 	rawConfig, err := DefaultRawConfig()
 	require.NoError(t, err, "DefaultRawConfig failed")
 
-	var config map[string]interface{}
+	var config map[string]any
 	err = json.Unmarshal([]byte(rawConfig), &config)
 	require.NoError(t, err, "Failed to parse default config")
 
 	assert.Equal(t, "aes", config["cipher"])
 
 	// Verify pki.key is not present
-	if pki, ok := config["pki"].(map[string]interface{}); ok {
+	if pki, ok := config["pki"].(map[string]any); ok {
 		assert.NotContains(t, pki, "key", "pki.key should not be present in default config")
 	}
 }
@@ -389,13 +389,13 @@ cipher: aes
 	jsonStr, err := YamlToJson(yamlStr)
 	require.NoError(t, err, "YamlToJson failed")
 
-	var result map[string]interface{}
+	var result map[string]any
 	err = json.Unmarshal([]byte(jsonStr), &result)
 	require.NoError(t, err, "Failed to parse JSON")
 
 	assert.Equal(t, "aes", result["cipher"])
 
-	pki, ok := result["pki"].(map[string]interface{})
+	pki, ok := result["pki"].(map[string]any)
 	require.True(t, ok, "pki should be a map")
 	assert.Equal(t, "test-ca", pki["ca"])
 }
