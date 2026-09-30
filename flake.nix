@@ -182,7 +182,7 @@
 
             src = ./nebula;
 
-            vendorHash = "sha256-unVP1lHrP6rl6yYSXx3WnPDojbUsgYLgc5d0e28DsuY=";
+            vendorHash = "sha256-g+kdf0LY4e7jg6+8sXDUxGFBj5bZvDwvXdDVPzgANDw=";
 
             proxyVendor = true;
             overrideModAttrs = (final: prev: {
@@ -212,7 +212,7 @@
             dontDartInstall = true;
             dontDartInstallCache = true;
 
-            outputHash = "sha256-dmUdFoP0z0+cQnqNEsqdL2qVI34Phu6Ez73deIHyXyM=";
+            outputHash = "sha256-cT3uuRd/98SGrW78DHVVUSH9xe5wHiGeWULBv+As3jg=";
             outputHashAlgo = "sha256";
             outputHashMode = "flat";
           }).overrideAttrs (prev: {
