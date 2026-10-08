@@ -62,7 +62,7 @@ flutter {
 }
 
 dependencies {
-    var workVersion = "2.11.1"
+    var workVersion = "2.12.0"
     implementation("androidx.security:security-crypto:1.1.0")
     implementation("androidx.work:work-runtime-ktx:$workVersion")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
