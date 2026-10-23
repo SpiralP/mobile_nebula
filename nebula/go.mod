@@ -26,6 +26,7 @@ require (
 	github.com/flynn/noise v1.1.0 // indirect
 	github.com/gaissmai/bart v0.29.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/google/gopacket v1.1.19 // indirect
 	github.com/miekg/dns v1.1.73 // indirect
 	github.com/miekg/pkcs11 v1.1.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
@@ -37,6 +38,7 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
 	github.com/stefanberger/go-pkcs11uri v0.0.0-20230803200340-78284954bff6 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/mod v0.40.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
@@ -44,8 +46,7 @@ require (
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb // indirect
 	golang.zx2c4.com/wireguard/windows v1.0.1 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gvisor.dev/gvisor v0.0.0-20250503011706-39ed1f5ac29c // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	google.golang.org/protobuf v1.36.12 // indirect
 )

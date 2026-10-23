@@ -157,7 +157,7 @@
           '';
         in
         rec {
-          inherit self gomobile androidComposition platformTools androidStudio jdk flutter emulator;
+          inherit self go gomobile androidComposition platformTools androidStudio jdk flutter emulator;
           inherit (pkgs) cmake;
 
           sign = pkgs.writeShellApplication {
@@ -182,7 +182,7 @@
 
             src = ./nebula;
 
-            vendorHash = "sha256-g+kdf0LY4e7jg6+8sXDUxGFBj5bZvDwvXdDVPzgANDw=";
+            vendorHash = "sha256-N4pErlk5pHEGkpbtKpGkmvpNQUZVw4o3xLmZhE/bFZ0=";
 
             proxyVendor = true;
             overrideModAttrs = (final: prev: {
