@@ -1,0 +1,337 @@
+# Builds the iOS and Android apps to check they compile, plus formatting, lint and Go tests.
+# The format, lint and test jobs only run on PRs that touch their files, macOS minutes aren't cheap.
+
+name: CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, labeled, reopened]
+
+jobs:
+  build-android:
+    name: Android
+    runs-on: macos-26
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #6.0.2
+        with:
+          show-progress: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 #6.5.0
+        with:
+          go-version-file: nebula/go.mod
+          cache: false
+        id: go
+
+      - name: Restore Go caches
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 #6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/Library/Caches/go-build
+          key: smoke-android-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('nebula/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            smoke-android-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('nebula/go.sum') }}-
+            smoke-android-go-${{ steps.go.outputs.go-version }}-
+            smoke-android-go-
+
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 #v5.2.0
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: "gradle"
+
+      - name: Install flutter
+        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e #v2.21.0
+        with:
+          flutter-version: '3.44.6'
+          cache: true
+
+      - name: install dependencies
+        env:
+          TOKEN: ${{ secrets.MACHINE_USER_PAT }}
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          gomobile init
+          flutter pub get
+          touch env.sh
+
+      - name: flutter test
+        run: |
+          ./gen-artifacts.sh skip
+          flutter test
+
+      - name: Build Android debug
+        run: flutter build appbundle --debug
+
+      - name: Setup bundletool for APK generation
+        if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'release-check')
+        run: |
+          curl -Lo bundletool.jar https://github.com/google/bundletool/releases/download/1.18.1/bundletool-all-1.18.1.jar
+
+      - name: Install the google play key material
+        if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'release-check')
+        env:
+          GOOGLE_PLAY_API_JWT_BASE64: ${{ secrets.GOOGLE_PLAY_API_JWT_BASE64 }}
+          GOOGLE_PLAY_KEYSTORE_BASE64: ${{ secrets.GOOGLE_PLAY_KEYSTORE_BASE64 }}
+        run: |
+          GOOGLE_PLAY_API_JWT_PATH="$RUNNER_TEMP/gp_api.json"
+          echo "GOOGLE_PLAY_API_JWT_PATH=$GOOGLE_PLAY_API_JWT_PATH" >> $GITHUB_ENV
+          echo -n "$GOOGLE_PLAY_API_JWT_BASE64" | base64 --decode --output "$GOOGLE_PLAY_API_JWT_PATH"
+
+          GOOGLE_PLAY_KEYSTORE_PATH="$RUNNER_TEMP/gp_signing.jks"
+          echo "GOOGLE_PLAY_KEYSTORE_PATH=$GOOGLE_PLAY_KEYSTORE_PATH" >> $GITHUB_ENV
+          echo -n "$GOOGLE_PLAY_KEYSTORE_BASE64" | base64 --decode --output "$GOOGLE_PLAY_KEYSTORE_PATH"
+
+      - name: Generate debug apk
+        if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'release-check')
+        env:
+          TOKEN: ${{ secrets.MACHINE_USER_PAT }}
+          GOOGLE_PLAY_KEYSTORE_PASSWORD: ${{ secrets.GOOGLE_PLAY_KEYSTORE_PASSWORD }}
+        run: |
+          java -jar bundletool.jar build-apks \
+            --bundle=build/app/outputs/bundle/debug/app-debug.aab \
+            --output=build/app/outputs/apk/debug/app-debug.apks \
+            --mode=universal \
+            --ks=$GOOGLE_PLAY_KEYSTORE_PATH \
+            --ks-key-alias=key \
+            --ks-pass=pass:$GOOGLE_PLAY_KEYSTORE_PASSWORD
+          unzip -p build/app/outputs/apk/debug/app-debug.apks universal.apk > build/app/outputs/apk/debug/app-debug.apk
+
+      - name: Collect debug apk
+        if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'release-check')
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f #6.0.0
+        with:
+          name: MobileNebulaDebug.apk
+          path: build/app/outputs/apk/debug/app-debug.apk
+          retention-days: 5
+
+  build-ios:
+    name: iOS
+    runs-on: macos-15
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #6.0.2
+        with:
+          show-progress: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 #6.5.0
+        with:
+          go-version-file: nebula/go.mod
+          cache: false
+        id: go
+
+      - name: Restore Go caches
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 #6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/Library/Caches/go-build
+          key: smoke-ios-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('nebula/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            smoke-ios-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('nebula/go.sum') }}-
+            smoke-ios-go-${{ steps.go.outputs.go-version }}-
+            smoke-ios-go-
+
+      - name: Install flutter
+        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e #v2.21.0
+        with:
+          flutter-version: '3.44.6'
+          cache: true
+
+      - name: install dependencies
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          gomobile init
+          flutter pub get
+          touch env.sh
+
+      - name: flutter test
+        run: |
+          ./gen-artifacts.sh skip
+          flutter test
+
+      - name: Build iOS
+        run: |
+          ./ensure-mobile-nebula.sh
+          # config-only raises the generated plugin package deployment target to match
+          # the project, required before driving xcodebuild directly
+          flutter build ios --release --config-only --no-codesign
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release clean archive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO -archivePath "build/MobileNebula.xcarchive"
+
+      - name: Collect iOS artifacts
+        if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'release-check')
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f #6.0.0
+        with:
+          name: MobileNebula.xcarchive
+          path: ios/build/MobileNebula.xcarchive
+          retention-days: 5
+
+  changes:
+    name: Detect changed files
+    runs-on: ubuntu-latest
+    outputs:
+      flutter: ${{ steps.filter.outputs.flutter }}
+      go: ${{ steps.filter.outputs.go }}
+      swift: ${{ steps.filter.outputs.swift }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #6.0.2
+        with:
+          show-progress: false
+
+      - name: Filter paths
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d #4.0.3
+        with:
+          filters: |
+            flutter:
+              - '.github/workflows/ci.yml'
+              - '**.dart'
+            go:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/gofmt.sh'
+              - '**.go'
+              - 'nebula/go.sum'
+            swift:
+              - '.github/workflows/ci.yml'
+              - '**.swift'
+
+  flutterfmt:
+    name: Run flutter format
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.flutter == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install flutter
+        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e #v2.21.0
+        with:
+          flutter-version: '3.44.6'
+          cache: true
+
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #6.0.2
+        with:
+          show-progress: false
+
+      - name: Check formating
+        run: dart format -l120 lib/ --set-exit-if-changed --suppress-analytics --output none
+  flutterlint:
+    name: Run flutter lint
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.flutter == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install flutter
+        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e #v2.21.0
+        with:
+          flutter-version: '3.44.6'
+
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #6.0.2
+        with:
+          show-progress: false
+          cache: true
+
+      - name: Check linting
+        run: dart fix --dry-run
+
+  gofmt:
+    name: Run gofmt
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #6.0.2
+        with:
+          show-progress: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 #6.5.0
+        with:
+          go-version-file: nebula/go.mod
+          cache: false
+        id: go
+
+      - name: Restore Go caches
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 #6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: gofmt-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('nebula/go.sum') }}
+          restore-keys: |
+            gofmt-go-
+
+      - name: Install goimports
+        working-directory: nebula
+        run: |
+          go get golang.org/x/tools/cmd/goimports
+          go build golang.org/x/tools/cmd/goimports
+
+      - name: gofmt
+        run: $GITHUB_WORKSPACE/.github/workflows/gofmt.sh
+
+  gotest:
+    name: Run Go tests
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #6.0.2
+        with:
+          show-progress: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 #6.5.0
+        with:
+          go-version-file: nebula/go.mod
+          cache: false
+        id: go
+
+      - name: Restore Go caches
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 #6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: gotest-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('nebula/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            gotest-go-${{ steps.go.outputs.go-version }}-${{ hashFiles('nebula/go.sum') }}-
+            gotest-go-${{ steps.go.outputs.go-version }}-
+            gotest-go-
+
+      - name: Go tests
+        run: cd nebula && go test ./...
+
+  swiftfmt:
+    name: Run swift format
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.swift == 'true'
+    runs-on: macos-26
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #6.0.2
+        with:
+          show-progress: false
+
+      - name: Check formating
+        run: ./swift-format.sh check
+
+  ci-pass-fail:
+    name: pass/fail check
+    if: always()
+    needs: [build-android, build-ios, changes, flutterfmt, flutterlint, gofmt, gotest, swiftfmt]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
