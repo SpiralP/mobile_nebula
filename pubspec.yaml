@@ -48,7 +48,7 @@ dev_dependencies:
   dart_pubspec_licenses: 3.2.0
   # dart_pubspec_licenses 3.2.0 is incompatible with pana >= 0.22.21
   # (upstream issue #40); pin the oldest 0.23.x so analyzer stays at 8.x
-  pana: 0.23.4
+  pana: 0.23.19
   flutter_lints: 6.0.0
   path_provider_platform_interface: 2.1.3
   test: 1.31.1
