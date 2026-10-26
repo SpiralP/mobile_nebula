@@ -1,6 +1,6 @@
 module github.com/DefinedNet/mobile_nebula/nebula
 
-go 1.26.5
+go 1.26.10
 
 replace github.com/slackhq/nebula v1.11.2 => github.com/spiralp/nebula v1.11.2-custom1
 
