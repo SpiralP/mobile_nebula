@@ -67,7 +67,7 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:$workVersion")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("com.google.code.gson:gson:2.13.2")
-    implementation("com.google.guava:guava:33.5.0-android")
+    implementation("com.google.guava:guava:33.7.2-android")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation(project(":mobileNebula"))
 
