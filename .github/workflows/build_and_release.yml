@@ -16,7 +16,7 @@ jobs:
   build:
     permissions:
       contents: read
-    uses: SpiralP/github-reusable-workflows/.github/workflows/build.yml@576066d5c11a790021209b302133fa87cce8b504 # main
+    uses: SpiralP/github-reusable-workflows/.github/workflows/build.yml@b19f9057e6e4f8754dcfef14fde34f70c694fd8e # main
     with:
       flake-attribute: default
       upload-build-result: true

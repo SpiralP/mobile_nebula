@@ -15,6 +15,6 @@ permissions:
 
 jobs:
   merge_upstream:
-    uses: SpiralP/github-reusable-workflows/.github/workflows/merge-upstream.yml@576066d5c11a790021209b302133fa87cce8b504 # main
+    uses: SpiralP/github-reusable-workflows/.github/workflows/merge-upstream.yml@b19f9057e6e4f8754dcfef14fde34f70c694fd8e # main
     with:
       url: https://github.com/DefinedNet/mobile_nebula.git
